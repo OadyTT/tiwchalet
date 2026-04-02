@@ -1,7 +1,9 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "regions": ["sin1"]
+  "crons": [
+    {
+      "path": "/api/backup",
+      "schedule": "0 2 * * 0"
+    }
+  ]
 }
