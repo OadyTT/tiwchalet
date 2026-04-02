@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
 
-// POST /api/approve — admin อนุมัติคำขอ upgrade
-// Body: { requestId, action: 'approve'|'reject', adminPin }
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { requestId, action, adminPin } = body
 
-  if (!adminPin || !/^[A-Za-z0-9]{4,5}$/.test(adminPin)) {
+  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const sb = getServiceClient()
+  const sb = getServiceClient()   // ← service_role: ผ่าน RLS ทุก operation
 
-  // ตรวจ admin PIN
-  const { data: cfg } = await sb.from('settings').select('parent_pin, full_version_pin, admin_line_id, admin_phone').eq('id', 1).single()
+  const { data: cfg } = await sb
+    .from('settings')
+    .select('parent_pin, full_version_pin')
+    .eq('id', 1)
+    .single()
+
   if (!cfg || adminPin !== cfg.parent_pin) {
     return NextResponse.json({ ok: false, error: 'PIN ไม่ถูกต้อง' }, { status: 401 })
   }
@@ -23,62 +25,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'requestId และ action จำเป็น' }, { status: 400 })
   }
 
-  // ดึง request
-  const { data: req_data } = await sb
+  // ดึง request ก่อน
+  const { data: reqData, error: fetchErr } = await sb
     .from('upgrade_requests')
     .select('*')
     .eq('id', requestId)
     .single()
 
-  if (!req_data) {
+  if (fetchErr || !reqData) {
     return NextResponse.json({ ok: false, error: 'ไม่พบคำขอนี้' }, { status: 404 })
   }
 
-  // อัพเดตสถานะ
+  // อัพเดตสถานะ — ใช้ service_role → ผ่าน RLS แน่นอน
   const newStatus = action === 'approve' ? 'approved' : 'rejected'
-  await sb.from('upgrade_requests').update({
-    status: newStatus,
-    approved_at: new Date().toISOString(),
-  }).eq('id', requestId)
+  const { error: updateErr } = await sb
+    .from('upgrade_requests')
+    .update({
+      status:      newStatus,
+      approved_at: new Date().toISOString(),
+    })
+    .eq('id', requestId)
 
-  // ส่ง LINE แจ้ง admin (broadcast หรือ push ถ้ามี user ID)
+  if (updateErr) {
+    console.error('Update error:', updateErr)
+    return NextResponse.json(
+      { ok: false, error: 'อัพเดตสถานะไม่สำเร็จ: ' + updateErr.message },
+      { status: 500 }
+    )
+  }
+
+  // ส่ง LINE แจ้ง admin
   const lineToken   = process.env.LINE_CHANNEL_TOKEN
   const adminUserId = process.env.LINE_ADMIN_USER_ID
 
   if (lineToken && adminUserId) {
-    const emoji  = action === 'approve' ? '✅' : '❌'
-    const label  = action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'
-    const msg    = [
-      `${emoji} ${label} คำขอ Full Version`,
+    const emoji = action === 'approve' ? '✅' : '❌'
+    const label = action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'
+    const msg   = [
+      `${emoji} ${label} Full Version`,
       '──────────────',
-      `👤 ชื่อ: ${req_data.name || '-'}`,
-      `📱 ติดต่อ: ${req_data.contact || '-'}`,
+      `👤 ชื่อ: ${reqData.name || '-'}`,
+      `📱 ติดต่อ: ${reqData.contact || '-'}`,
       action === 'approve'
-        ? `🔑 PIN Full Version: ${cfg.full_version_pin}\nกรุณาส่ง PIN นี้ให้ลูกค้าทาง LINE`
-        : `📝 หมายเหตุ: ${body.note || 'ไม่อนุมัติ'}`,
+        ? `🔑 PIN Full Version: ${cfg.full_version_pin}\n→ ส่ง PIN นี้ให้ลูกค้าทาง LINE`
+        : `📝 หมายเหตุ: ปฏิเสธคำขอนี้แล้ว`,
     ].join('\n')
 
     try {
       await fetch('https://api.line.me/v2/bot/message/push', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lineToken}` },
-        body: JSON.stringify({ to: adminUserId, messages: [{ type: 'text', text: msg }] }),
+        body:    JSON.stringify({ to: adminUserId, messages: [{ type: 'text', text: msg }] }),
       })
     } catch (_) {}
   }
 
   return NextResponse.json({
-    ok: true,
-    status: newStatus,
-    message: action === 'approve' ? 'อนุมัติสำเร็จ — แจ้ง LINE admin แล้ว' : 'ปฏิเสธสำเร็จ',
+    ok:      true,
+    status:  newStatus,
+    message: action === 'approve' ? 'อนุมัติสำเร็จ' : 'ปฏิเสธสำเร็จ',
     fullPin: action === 'approve' ? cfg.full_version_pin : undefined,
   })
 }
 
-// GET /api/approve — ดูรายการคำขอทั้งหมด (admin only)
 export async function GET(req: NextRequest) {
   const adminPin = req.headers.get('x-admin-pin') || ''
-  if (!adminPin || !/^[A-Za-z0-9]{4,5}$/.test(adminPin)) {
+  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -88,11 +100,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data } = await sb
+  const { data, error } = await sb
     .from('upgrade_requests')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(50)
+
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true, requests: data || [] })
 }
