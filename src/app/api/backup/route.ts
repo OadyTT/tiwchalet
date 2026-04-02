@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
 
-// POST /api/backup — backup ข้อมูลไป Google Sheets ผ่าน GAS
-// ใช้ได้ทั้ง manual (parent กดปุ่ม) และ auto (cron จาก Vercel)
+// POST /api/backup — รับ x-admin-pin (parent PIN 4 หลัก) หรือ x-cron-secret
+// แล้วส่งข้อมูลไป GAS พร้อม columns เพิ่มเติมเพื่อ track ลูกค้าไม่ให้ซ้ำ
 export async function POST(req: NextRequest) {
-  // Auth — parent PIN หรือ cron secret
-  const adminPin    = req.headers.get('x-admin-pin') || ''
-  const cronSecret  = req.headers.get('x-cron-secret') || ''
-  const envCron     = process.env.CRON_SECRET || 'tiwchalet-cron'
+  const adminPin   = req.headers.get('x-admin-pin') || ''
+  const cronSecret = req.headers.get('x-cron-secret') || ''
+  const envCron    = process.env.CRON_SECRET || 'tiwchalet-cron'
 
-  const isAuthed = (adminPin && /^[A-Za-z0-9]{4,5}$/.test(adminPin)) || cronSecret === envCron
-  if (!isAuthed) {
+  // auth: PIN 4 หลักตัวเลข หรือ cron secret
+  const isValidPin  = /^\d{4}$/.test(adminPin)
+  const isValidCron = cronSecret === envCron
+
+  if (!isValidPin && !isValidCron) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  // ถ้าเป็น parent PIN ตรวจสอบก่อน
-  if (adminPin) {
+  // ถ้าเป็น PIN → ตรวจสอบกับ DB
+  if (isValidPin) {
     const sb2 = getServiceClient()
     const { data: cfg } = await sb2.from('settings').select('parent_pin').eq('id', 1).single()
     if (!cfg || adminPin !== cfg.parent_pin) {
@@ -33,25 +35,37 @@ export async function POST(req: NextRequest) {
   // ดึงข้อมูลจาก Supabase
   const [resResults, resUpgrades, resQuestions] = await Promise.all([
     sb.from('exam_results').select('*').order('created_at', { ascending: false }).limit(500),
-    sb.from('upgrade_requests').select('*').order('created_at', { ascending: false }).limit(200),
+    sb.from('upgrade_requests').select('id,name,contact,note,status,amount,created_at,approved_at').order('created_at', { ascending: false }).limit(200),
     sb.from('questions').select('id,school,year,subject,level,text,opt_a,opt_b,opt_c,opt_d,ans,source,created_at').limit(1000),
   ])
 
+  // เพิ่ม unique_key ในแต่ละ record เพื่อ dedup ใน Sheets
+  const examResultsWithKey = (resResults.data || []).map(r => ({
+    ...r,
+    unique_key: `result_${r.id}`,    // ← เพิ่ม column นี้สำหรับ dedup
+    backup_time: new Date().toISOString(),
+  }))
+
+  const upgradesWithKey = (resUpgrades.data || []).map(r => ({
+    ...r,
+    unique_key: `upgrade_${r.id}`,   // ← เพิ่ม column นี้
+    backup_time: new Date().toISOString(),
+  }))
+
   const backupData = {
-    action:        'fullBackup',
-    timestamp:     new Date().toISOString(),
-    examResults:   resResults.data   || [],
-    upgrades:      resUpgrades.data  || [],
-    questions:     resQuestions.data || [],
+    action:      'fullBackup',
+    timestamp:   new Date().toISOString(),
+    examResults: examResultsWithKey,
+    upgrades:    upgradesWithKey,
+    questions:   resQuestions.data || [],
     counts: {
-      results:   (resResults.data   || []).length,
-      upgrades:  (resUpgrades.data  || []).length,
+      results:   examResultsWithKey.length,
+      upgrades:  upgradesWithKey.length,
       questions: (resQuestions.data || []).length,
     },
   }
 
-  // ส่งไป GAS
-  let gasOk = false
+  let gasOk  = false
   let gasErr = ''
   try {
     const resp = await fetch(gasUrl, {
@@ -60,14 +74,18 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(backupData),
     })
     gasOk = resp.ok
-    if (!resp.ok) gasErr = `GAS status: ${resp.status}`
+    if (!resp.ok) {
+      const txt = await resp.text()
+      gasErr = `GAS ${resp.status}: ${txt.slice(0, 200)}`
+    }
   } catch (e: any) {
     gasErr = e.message
   }
 
-  // บันทึก backup log ลง Supabase
+  // บันทึก backup log
+  const sb3 = getServiceClient()
   try {
-    await sb.from('backup_logs').upsert({
+    await sb3.from('backup_logs').upsert({
       id:            1,
       last_backup:   new Date().toISOString(),
       rows_results:  backupData.counts.results,
@@ -76,19 +94,18 @@ export async function POST(req: NextRequest) {
       gas_ok:        gasOk,
       note:          gasErr || 'success',
     })
-  } catch (_) {} // ไม่ error ถ้า table ยังไม่มี
+  } catch (_) {}
 
   return NextResponse.json({
-    ok:    true,
+    ok:     true,
     gasOk,
     counts: backupData.counts,
     message: gasOk
-      ? `Backup สำเร็จ — ส่ง ${backupData.counts.results + backupData.counts.upgrades + backupData.counts.questions} records ไป Google Sheets`
-      : `ส่งข้อมูลได้แต่ GAS error: ${gasErr}`,
+      ? `✅ Backup สำเร็จ — ${backupData.counts.results} ผลสอบ · ${backupData.counts.upgrades} คำขอ · ${backupData.counts.questions} ข้อสอบ`
+      : `⚠️ ดึงข้อมูลได้ แต่ส่ง GAS ไม่สำเร็จ: ${gasErr}`,
   })
 }
 
-// GET /api/backup — ดูสถานะ backup ล่าสุด
 export async function GET(req: NextRequest) {
   const adminPin = req.headers.get('x-admin-pin') || ''
   if (!adminPin) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
@@ -104,5 +121,6 @@ export async function GET(req: NextRequest) {
     const res = await sb.from('backup_logs').select('*').eq('id', 1).single()
     data = res.data
   } catch (_) {}
+
   return NextResponse.json({ ok: true, log: data })
 }

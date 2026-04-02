@@ -141,17 +141,24 @@ export default function AdminPage() {
     if(!newQ.text||!newQ.optA) return
     setAddingQ(true)
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-      const { error } = await sb.from('questions').insert({
-        school:newQ.school,year:newQ.year,subject:newQ.subject,level:newQ.level,
-        text:newQ.text,opt_a:newQ.optA,opt_b:newQ.optB,opt_c:newQ.optC,opt_d:newQ.optD,
-        ans:newQ.ans,explain:newQ.explain,source:'admin',
+      // ← ใช้ API route แทน direct supabase เพื่อใช้ service_role key
+      const res  = await fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
+        body: JSON.stringify({
+          school:  newQ.school,  year:    newQ.year,
+          subject: newQ.subject, level:   newQ.level,
+          text:    newQ.text,    opt_a:   newQ.optA,
+          opt_b:   newQ.optB,    opt_c:   newQ.optC,
+          opt_d:   newQ.optD,    ans:     newQ.ans,
+          explain: newQ.explain, source:  'admin',
+        }),
       })
-      if(error) throw new Error(error.message)
+      const data = await res.json()
+      if(!data.ok) throw new Error(data.error||'เกิดข้อผิดพลาด')
       setNewQ(p=>({...p,text:'',optA:'',optB:'',optC:'',optD:'',explain:'',ans:0}))
       await loadAll(pin)
-      alert('✅ เพิ่มข้อสอบสำเร็จ')
+      alert('✅ '+data.message)
     } catch(e:any){ alert('Error: '+e.message) }
     finally{ setAddingQ(false) }
   }
