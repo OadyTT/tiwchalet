@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { requestId, action, adminPin } = body
 
-  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
+  if (!adminPin || !/^[A-Za-z0-9]{4,5}$/.test(adminPin)) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 // GET /api/approve — ดูรายการคำขอทั้งหมด (admin only)
 export async function GET(req: NextRequest) {
   const adminPin = req.headers.get('x-admin-pin') || ''
-  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
+  if (!adminPin || !/^[A-Za-z0-9]{4,5}$/.test(adminPin)) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 

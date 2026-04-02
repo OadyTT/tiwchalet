@@ -330,13 +330,14 @@ export default function AdminPage() {
                 <F label="PIN ผู้ปกครอง">
                   <input value={settings.parent_pin} onChange={e=>upd('parent_pin',e.target.value)} maxLength={4} type="password" {...IS}/>
                 </F>
-                <F label="PIN Full Version">
-                  <input value={settings.full_version_pin} onChange={e=>upd('full_version_pin',e.target.value)} maxLength={4} type="password" {...IS}/>
+                <F label="PIN Full Version (5 ตัว ตัวอักษร+ตัวเลข)">
+                  <input value={settings.full_version_pin} onChange={e=>upd('full_version_pin',e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5))} maxLength={5} type="text" placeholder="เช่น aB3k9" {...IS}/>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:4}}>ตัวใหญ่-ตัวเล็กแตกต่างกัน · ต้อง 5 ตัวพอดี</div>
                 </F>
               </div>
               <div style={{background:C.greenL,borderRadius:9,padding:'9px 12px',fontSize:12,color:C.greenD}}>
-                PIN Full Version ปัจจุบัน: <strong>{settings.full_version_pin}</strong><br/>
-                ส่งรหัสนี้ให้ลูกค้าหลังจาก approve สลิป
+                PIN Full Version: <strong style={{fontSize:16,fontFamily:'monospace',letterSpacing:4}}>{settings.full_version_pin}</strong><br/>
+                <span style={{fontSize:11,opacity:.8}}>ส่งรหัสนี้ให้ลูกค้าหลังจาก approve สลิป (Case-sensitive)</span>
               </div>
             </Sec>
 

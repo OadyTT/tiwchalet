@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const cronSecret  = req.headers.get('x-cron-secret') || ''
   const envCron     = process.env.CRON_SECRET || 'tiwchalet-cron'
 
-  const isAuthed = (adminPin && /^\d{4}$/.test(adminPin)) || cronSecret === envCron
+  const isAuthed = (adminPin && /^[A-Za-z0-9]{4,5}$/.test(adminPin)) || cronSecret === envCron
   if (!isAuthed) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }

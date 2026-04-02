@@ -33,40 +33,74 @@ const persist = {
 }
 
 // ─── PIN MODAL ────────────────────────────────────────
-function PinModal({title, onSuccess, onCancel}:{title:string; onSuccess:(t:string,d?:any)=>void; onCancel:()=>void}) {
+// type='parent' → numpad 4 หลักตัวเลข
+// type='full'   → keyboard input 5 ตัว ตัวอักษร+ตัวเลข
+function PinModal({title, pinType='parent', onSuccess, onCancel}:{title:string; pinType?:'parent'|'full'; onSuccess:(t:string,d?:any)=>void; onCancel:()=>void}) {
   const [pin,setPinVal]=useState(''); const [busy,setBusy]=useState(false); const [err,setErr]=useState(''); const [shake,setShake]=useState(false)
   const cid = useRef(Math.random().toString(36).slice(2))
+  const maxLen  = pinType==='full' ? 5 : 4
+  const apiType = pinType==='full' ? 'full' : 'parent'
+
+  // numpad (parent only)
   const tap = async (d:string) => {
-    if(busy) return
+    if(busy||pinType!=='parent') return
     const next = d==='⌫'?pin.slice(0,-1):pin+d
     if(next.length>4) return
     setPinVal(next); setErr('')
-    if(next.length===4) {
-      setBusy(true)
-      try {
-        const res  = await fetch('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:next,type:'parent',clientId:cid.current})})
-        const data = await res.json()
-        if(data.ok) { onSuccess(data.token,data) }
-        else { setShake(true); setErr(data.error||'PIN ไม่ถูกต้อง'); setPinVal(''); setTimeout(()=>setShake(false),400) }
-      } catch { setErr('เชื่อมต่อไม่ได้'); setPinVal('') }
-      finally { setBusy(false) }
-    }
+    if(next.length===4) await submit(next)
   }
+
+  // keyboard submit (full version)
+  const submit = async (p:string) => {
+    setBusy(true)
+    try {
+      const res  = await fetch('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:p,type:apiType,clientId:cid.current})})
+      const data = await res.json()
+      if(data.ok) { onSuccess(data.token,data) }
+      else { setShake(true); setErr(data.error||'PIN ไม่ถูกต้อง'); setPinVal(''); setTimeout(()=>setShake(false),400) }
+    } catch { setErr('เชื่อมต่อไม่ได้'); setPinVal('') }
+    finally { setBusy(false) }
+  }
+
+  const hint = pinType==='full' ? 'ใส่รหัส 5 ตัว (ตัวอักษร+ตัวเลข)' : 'ใส่รหัส 4 หลัก'
+
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:600,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div style={{background:'#fff',borderRadius:20,padding:'32px 24px',width:'100%',maxWidth:300,textAlign:'center',animation:shake?'shake .35s ease':undefined}}>
         <style>{`@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}`}</style>
-        <div style={{fontSize:32,marginBottom:10}}>🔒</div>
+        <div style={{fontSize:32,marginBottom:10}}>{pinType==='full'?'⭐':'🔒'}</div>
         <div style={{fontSize:16,fontWeight:700,marginBottom:4,color:C.text}}>{title}</div>
-        <div style={{fontSize:13,color:err?C.red:C.muted,marginBottom:20,minHeight:18}}>{err||'ใส่รหัส 4 หลัก'}</div>
-        <div style={{display:'flex',justifyContent:'center',gap:14,marginBottom:24}}>
-          {[0,1,2,3].map(i=><div key={i} style={{width:13,height:13,borderRadius:'50%',background:i<pin.length?C.navy:'#e2e8f0',transition:'background .12s'}}/>)}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
-          {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d,i)=>d===''?<div key={i}/>:
-            <button key={i} onClick={()=>tap(d)} disabled={busy} style={{height:50,borderRadius:12,border:'1px solid #e2e8f0',background:'#fafafa',fontSize:d==='⌫'?16:19,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:C.text}}>{d}</button>
-          )}
-        </div>
+        <div style={{fontSize:13,color:err?C.red:C.muted,marginBottom:16,minHeight:18}}>{err||hint}</div>
+
+        {pinType==='full' ? (
+          // keyboard input สำหรับ full version PIN
+          <div style={{marginBottom:16}}>
+            <input
+              value={pin}
+              onChange={e=>{ const v=e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5); setPinVal(v); setErr('') }}
+              onKeyDown={e=>{ if(e.key==='Enter'&&pin.length===5) submit(pin) }}
+              placeholder="เช่น aB3k9"
+              autoFocus
+              style={{width:'100%',padding:'12px 14px',borderRadius:12,border:`2px solid ${err?C.red:'#e2e8f0'}`,background:'#fafafa',fontSize:20,fontWeight:700,textAlign:'center',letterSpacing:6,fontFamily:'monospace',outline:'none',color:C.text}}
+            />
+            <div style={{fontSize:11,color:C.muted,marginTop:6}}>ตัวใหญ่-ตัวเล็กแตกต่างกัน (Case-sensitive)</div>
+            <button onClick={()=>submit(pin)} disabled={pin.length!==5||busy} style={{width:'100%',marginTop:10,padding:'11px',borderRadius:10,border:'none',background:pin.length===5&&!busy?C.gold:'#d1d5db',color:'#fff',fontSize:14,fontWeight:700,cursor:pin.length===5&&!busy?'pointer':'default',fontFamily:'inherit'}}>
+              {busy?'กำลังตรวจสอบ...':'ปลดล็อก ⭐'}
+            </button>
+          </div>
+        ) : (
+          // numpad สำหรับ parent PIN
+          <>
+            <div style={{display:'flex',justifyContent:'center',gap:14,marginBottom:24}}>
+              {[0,1,2,3].map(i=><div key={i} style={{width:13,height:13,borderRadius:'50%',background:i<pin.length?C.navy:'#e2e8f0',transition:'background .12s'}}/>)}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
+              {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d,i)=>d===''?<div key={i}/>:
+                <button key={i} onClick={()=>tap(d)} disabled={busy} style={{height:50,borderRadius:12,border:'1px solid #e2e8f0',background:'#fafafa',fontSize:d==='⌫'?16:19,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:C.text}}>{d}</button>
+              )}
+            </div>
+          </>
+        )}
         <button onClick={onCancel} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>ยกเลิก</button>
       </div>
     </div>
@@ -373,8 +407,8 @@ export default function Home() {
 
       {showPin && (
         plan==='trial' && screen==='upgrade'
-          ? <PinModal title="ปลดล็อก Full Version" onSuccess={unlockFull} onCancel={()=>setShowPin(false)}/>
-          : <PinModal title="โหมดผู้ปกครอง" onSuccess={unlockParent} onCancel={()=>setShowPin(false)}/>
+          ? <PinModal title="ปลดล็อก Full Version" pinType="full" onSuccess={unlockFull} onCancel={()=>setShowPin(false)}/>
+          : <PinModal title="โหมดผู้ปกครอง" pinType="parent" onSuccess={unlockParent} onCancel={()=>setShowPin(false)}/>
       )}
       {showPayment && <PaymentModal cfg={cfg} onClose={()=>setShowPayment(false)}/>}
       {showCompare && <CompareModal onClose={()=>setShowCompare(false)} onPay={()=>{setShowCompare(false);setShowPayment(true)}}/>}
