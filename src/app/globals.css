@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/* ── TiwChalet v1.0 — Mobile-first ── */
+:root {
+  --green:#16a34a; --green-light:#dcfce7; --green-dark:#14532d;
+  --navy:#1e293b; --gold:#d97706; --gold-light:#fef3c7;
+  --red:#dc2626; --gray:#f8fafc; --border:#e2e8f0;
+  --text:#0f172a; --muted:#64748b;
+  --radius:12px;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{font-family:'Sarabun','Noto Sans Thai',-apple-system,sans-serif;background:var(--gray);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+.app-shell{min-height:100dvh;display:flex;flex-direction:column}
+.content{flex:1;width:100%;max-width:480px;margin:0 auto;padding:14px 14px 80px}
+@media(min-width:640px){.content{padding:20px 24px 80px}}
+.topbar{position:sticky;top:0;z-index:100;background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bottomnav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);display:flex;justify-content:space-around;padding:8px 0 max(10px,env(safe-area-inset-bottom));z-index:50}
+.nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;padding:4px 12px;min-width:56px;font-family:inherit}
+.nav-icon{font-size:22px;line-height:1}
+.nav-label{font-size:10px;color:var(--muted);font-weight:400}
+.nav-item.active .nav-label{color:var(--green);font-weight:700}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.opts-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 20px;border-radius:10px;border:none;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .12s,transform .1s;text-decoration:none;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-primary{background:var(--navy);color:#fff}
+.btn-green{background:var(--green);color:#fff;box-shadow:0 3px 12px rgba(22,163,74,.3)}
+.btn-gold{background:var(--gold);color:#fff}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+.btn-full{width:100%}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:#fafafa;font-family:inherit;font-size:14px;color:var(--text);outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--green);background:#fff;box-shadow:0 0 0 3px rgba(22,163,74,.1)}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-trial{background:#f1f5f9;color:var(--muted)}
+.badge-full{background:var(--gold-light);color:var(--gold);border:1px solid #fcd34d}
+.badge-green{background:var(--green-light);color:var(--green)}
+.badge-red{background:#fee2e2;color:var(--red)}
+.progress-bar{height:5px;background:#e2e8f0;border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;background:var(--navy);border-radius:4px;transition:width .4s ease}
+.pin-dots{display:flex;justify-content:center;gap:14px;margin:20px 0}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:#e2e8f0;border:2px solid #cbd5e1;transition:all .12s}
+.pin-dot.filled{background:var(--navy);border-color:var(--navy)}
+.pin-dot.error{background:var(--red);border-color:var(--red)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:640px){.modal-overlay{align-items:center;padding:20px}}
+.modal-box{background:#fff;border-radius:20px 20px 0 0;padding:28px 20px max(24px,env(safe-area-inset-bottom));width:100%;max-width:480px;max-height:95dvh;overflow-y:auto}
+@media(min-width:640px){.modal-box{border-radius:20px;max-height:90dvh}}
+.fade-in{animation:fadeUp .25s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.spin{animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.shake{animation:shake .35s ease}
