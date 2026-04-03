@@ -1,201 +1,173 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
 
-// ── PDF Import API  v1.1 ───────────────────────────────────────────
-// รับ PDF base64 → ส่งไป Claude API → parse ข้อสอบ → บันทึก Supabase
-//
-// Claude อ่าน PDF ได้โดยตรง (document block) ไม่ต้องแปลงก่อน
-// รองรับทั้ง PDF พิมพ์ และ PDF สแกน (Claude มี vision)
+// ── PDF Import v2 — ไม่ใช้ Anthropic API ────────────────────────
+// ใช้ pdf-parse extract text แล้ว parse pattern เอง
+// รองรับ PDF พิมพ์จากคอมพิวเตอร์ (text-selectable)
+// PDF สแกน → แจ้ง user ให้กรอกเอง
 
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514'
-const MAX_PDF_MB   = 10
+const MAX_PDF_MB = 10
 
-const SYSTEM_PROMPT = `คุณเป็นผู้เชี่ยวชาญด้านการแปลงข้อสอบไทยจาก PDF
-งานของคุณคืออ่าน PDF ที่มีข้อสอบปรนัย แล้วแปลงเป็น JSON array
+// ── Pattern parser ────────────────────────────────────────────────
+// รองรับรูปแบบข้อสอบไทยหลายแบบ:
+// "1. โจทย์\nก. ก\nข. ข\nค. ค\nง. ง\nเฉลย ก"
+// "ข้อ 1) โจทย์\n1) ก\n2) ข\n3) ค\n4) ง\nตอบ 1"
+function parseQuestions(text: string, school: string, subject: string, year: string) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  const questions: any[] = []
 
-กฎที่ต้องปฏิบัติอย่างเคร่งครัด:
-1. ตอบเป็น JSON array เท่านั้น ห้ามมีข้อความอื่นนำหน้าหรือตามหลัง
-2. ไม่ต้องใส่ markdown code block (\`\`\`json)
-3. ถ้าหาตัวเลือกหรือเฉลยไม่พบให้ใส่ค่าว่าง
-4. ans คือ index 0-3 ของตัวเลือกที่ถูก (0=ก/A, 1=ข/B, 2=ค/C, 3=ง/D)
-5. ถ้าไม่รู้เฉลยให้ใส่ -1
+  // regex patterns
+  const qPat   = /^(?:ข้อ\s*)?(\d+)[.)]\s*(.+)/
+  const optTh  = /^([กขคง])[.)]\s*(.+)/
+  const optNum = /^\(?([1-4])[.)]\s*(.+)/
+  const ansPat = /(?:เฉลย|ตอบ|คำตอบ|ans)[:\s]*([กขคง1-4])/i
+  const ansMap: Record<string,number> = { ก:0, ข:1, ค:2, ง:3, '1':0, '2':1, '3':2, '4':3 }
 
-รูปแบบ JSON:
-[{
-  "text": "โจทย์ข้อสอบ",
-  "opt_a": "ตัวเลือก ก",
-  "opt_b": "ตัวเลือก ข", 
-  "opt_c": "ตัวเลือก ค",
-  "opt_d": "ตัวเลือก ง",
-  "ans": 0,
-  "explain": "คำอธิบายเฉลย (ถ้ามี)"
-}]`
+  let i = 0
+  while (i < lines.length) {
+    const qm = lines[i].match(qPat)
+    if (qm && parseInt(qm[1]) >= 1 && parseInt(qm[1]) <= 200) {
+      const text = qm[2].trim()
+      const opts: string[] = []
+      let ans = -1
+      let j = i + 1
+
+      // collect options
+      while (j < lines.length && opts.length < 4) {
+        const tm = lines[j].match(optTh)
+        const nm = lines[j].match(optNum)
+        if (tm)  { opts.push(tm[2].trim());  j++ }
+        else if (nm) { opts.push(nm[2].trim()); j++ }
+        else if (lines[j].match(qPat)) break  // next question
+        else { j++ }
+      }
+
+      // find answer in surrounding lines
+      for (let k = i; k < Math.min(j + 3, lines.length); k++) {
+        const am = lines[k].match(ansPat)
+        if (am) {
+          ans = ansMap[am[1].toUpperCase() === 'ก' ? 'ก' : am[1].toUpperCase() === 'ข' ? 'ข' : am[1].toUpperCase() === 'ค' ? 'ค' : am[1].toUpperCase() === 'ง' ? 'ง' : am[1]] ?? -1
+          break
+        }
+      }
+
+      if (text && opts.length >= 2) {
+        while (opts.length < 4) opts.push('')
+        questions.push({
+          text, opts: opts.slice(0, 4),
+          opt_a: opts[0], opt_b: opts[1], opt_c: opts[2] || '', opt_d: opts[3] || '',
+          ans: ans >= 0 ? ans : 0,
+          explain: '', school, subject, year, level: 'ปานกลาง',
+        })
+      }
+      i = j
+    } else { i++ }
+  }
+  return questions
+}
 
 export async function POST(req: NextRequest) {
-  // ── Auth: ต้องมี parent PIN ──
+  // ── Auth ──────────────────────────────────────────────────────
   const adminPin = req.headers.get('x-admin-pin') || ''
-  if (!adminPin || !/^[A-Za-z0-9]{4,5}$/.test(adminPin)) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-  }
-  const sb = getServiceClient()
-  const { data: settings } = await sb.from('settings').select('parent_pin').eq('id', 1).single()
-  if (!settings || adminPin !== settings.parent_pin) {
-    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized — ต้องใส่ PIN 4 หลัก' }, { status: 401 })
   }
 
-  // ── Parse body ──
+  const sb = getServiceClient()
+  const { data: cfg } = await sb.from('settings').select('parent_pin').eq('id', 1).single()
+  if (!cfg || adminPin !== cfg.parent_pin) {
+    return NextResponse.json({ ok: false, error: 'PIN ไม่ถูกต้อง' }, { status: 401 })
+  }
+
+  // ── Parse body ────────────────────────────────────────────────
   const body = await req.json().catch(() => ({}))
   const { fileBase64, fileName, school, subject, year, confirmImport, previewData, fileId } = body
 
-  // ── Mode 2: ยืนยัน import จาก preview ──
+  // ── Mode 2: ยืนยัน import ─────────────────────────────────────
   if (confirmImport && previewData && Array.isArray(previewData)) {
-    return await doImport(sb, previewData, { school, subject, year, fileName, fileId })
+    const rows = previewData.filter((q: any) => q.text && q.opt_a).map((q: any) => ({
+      school:  school || q.school  || 'ไม่ระบุ',
+      year:    year   || q.year    || '2566',
+      subject: subject|| q.subject || 'ไม่ระบุ',
+      level:   q.level|| 'ปานกลาง',
+      text:    q.text, opt_a: q.opt_a || q.opts?.[0] || '',
+      opt_b:   q.opt_b|| q.opts?.[1] || '', opt_c: q.opt_c || q.opts?.[2] || '',
+      opt_d:   q.opt_d|| q.opts?.[3] || '', ans: typeof q.ans==='number'?q.ans:0,
+      explain: q.explain || '',
+      source:  `pdf:${fileName || fileId || 'upload'}`,
+    }))
+
+    const { data, error } = await sb.from('questions').insert(rows).select('id')
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+
+    return NextResponse.json({
+      ok: true, status: 'imported',
+      imported: data?.length || rows.length,
+      message: `✅ เพิ่มข้อสอบ ${data?.length || rows.length} ข้อเรียบร้อยแล้ว`,
+    })
   }
 
-  // ── Mode 1: Parse PDF ──
+  // ── Mode 1: Extract text from PDF ─────────────────────────────
   if (!fileBase64) {
     return NextResponse.json({ ok: false, error: 'fileBase64 is required' }, { status: 400 })
   }
 
-  // ตรวจขนาดไฟล์
   const sizeBytes = (fileBase64.length * 3) / 4
   if (sizeBytes > MAX_PDF_MB * 1024 * 1024) {
-    return NextResponse.json(
-      { ok: false, error: `ไฟล์ใหญ่เกิน ${MAX_PDF_MB}MB` }, { status: 400 }
-    )
+    return NextResponse.json({ ok: false, error: `ไฟล์ใหญ่เกิน ${MAX_PDF_MB}MB` }, { status: 400 })
   }
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
-  if (!anthropicKey) {
-    return NextResponse.json(
-      { ok: false, error: 'ANTHROPIC_API_KEY ยังไม่ได้ตั้งค่าใน Vercel Environment Variables' },
-      { status: 503 }
-    )
-  }
+  // Extract text using pdf-parse
+  let extractedText = ''
+  let isScanned = false
 
-  // ── เรียก Claude API ──
-  let parsed: any[] = []
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         anthropicKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      CLAUDE_MODEL,
-        max_tokens: 8000,
-        system:     SYSTEM_PROMPT,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type:       'base64',
-                media_type: 'application/pdf',
-                data:       fileBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: `ไฟล์นี้คือข้อสอบวิชา "${subject || 'ไม่ระบุ'}" ของโรงเรียน "${school || 'ไม่ระบุ'}" ปี ${year || '2566'}
-กรุณาอ่านข้อสอบทั้งหมดในไฟล์แล้วแปลงเป็น JSON array ตามรูปแบบที่กำหนด
-ดึงข้อสอบให้ครบทุกข้อที่พบในไฟล์`,
-            },
-          ],
-        }],
-      }),
-    })
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse  = require('pdf-parse') as (buf: Buffer, opt?: any) => Promise<{text:string;numpages:number}>
+    const pdfBuffer = Buffer.from(fileBase64, 'base64')
+    const pdfData   = await pdfParse(pdfBuffer, { max: 0 })
+    extractedText   = pdfData.text || ''
 
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error('Claude API error:', errText)
-      return NextResponse.json(
-        { ok: false, error: `Claude API error: ${response.status}` }, { status: 502 }
-      )
+    // ตรวจว่าเป็นสแกน (text น้อยกว่า 50 ตัวอักษร)
+    if (extractedText.replace(/\s/g, '').length < 50) {
+      isScanned = true
     }
-
-    const aiData   = await response.json()
-    const aiText   = aiData.content?.map((c: any) => c.text || '').join('') || ''
-
-    // Parse JSON — ลอง clean ก่อนถ้ามี markdown fence
-    const cleaned  = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    const arrMatch = cleaned.match(/\[[\s\S]*\]/)
-    if (!arrMatch) {
-      return NextResponse.json(
-        { ok: false, error: 'ไม่พบข้อสอบในไฟล์นี้ หรือรูปแบบไม่ถูกต้อง', rawText: aiText.slice(0, 500) },
-        { status: 422 }
-      )
-    }
-
-    parsed = JSON.parse(arrMatch[0])
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: 'ไม่พบข้อสอบในไฟล์นี้' }, { status: 422 }
-      )
-    }
-
-    // Normalize
-    parsed = parsed.map((q: any, i: number) => ({
-      text:    String(q.text    || '').trim(),
-      opt_a:   String(q.opt_a  || q.a || '').trim(),
-      opt_b:   String(q.opt_b  || q.b || '').trim(),
-      opt_c:   String(q.opt_c  || q.c || '').trim(),
-      opt_d:   String(q.opt_d  || q.d || '').trim(),
-      ans:     typeof q.ans === 'number' ? q.ans : -1,
-      explain: String(q.explain || q.explanation || '').trim(),
-    })).filter((q: any) => q.text.length > 0)
-
   } catch (e: any) {
-    console.error('Parse error:', e)
-    return NextResponse.json(
-      { ok: false, error: 'Parse ไม่สำเร็จ: ' + e.message }, { status: 500 }
-    )
+    console.error('PDF parse error:', e.message)
+    // ถ้า parse ไม่ได้ อาจเป็นสแกน หรือ PDF เสีย
+    isScanned = true
   }
 
-  // ส่ง preview กลับ รอให้ user ยืนยันก่อน import
+  // ── PDF สแกน ────────────────────────────────────────────────
+  if (isScanned) {
+    return NextResponse.json({
+      ok: true, status: 'scanned',
+      message: 'PDF นี้เป็นไฟล์สแกน (ภาพถ่าย) ไม่สามารถอ่านข้อความอัตโนมัติได้',
+      howTo: 'กรุณาเปิด PDF แล้วพิมพ์ข้อสอบเองในแท็บ "ข้อสอบ"',
+      textFound: extractedText.length,
+    })
+  }
+
+  // ── Parse questions ──────────────────────────────────────────
+  const parsed = parseQuestions(extractedText, school || '', subject || '', year || '2566')
+
+  if (!parsed.length) {
+    // text อ่านได้แต่ parse pattern ไม่ตรง — ส่ง raw text กลับมาให้ดู
+    return NextResponse.json({
+      ok: true, status: 'text_only',
+      message: 'อ่านข้อความได้แต่ไม่พบรูปแบบข้อสอบที่รู้จัก',
+      rawText: extractedText.slice(0, 2000),
+      howTo: 'ดูข้อความด้านบนแล้วกรอกข้อสอบเองในแท็บ "ข้อสอบ"',
+    })
+  }
+
+  // ── ส่ง preview กลับ ────────────────────────────────────────
   const newFileId = `pdf_${Date.now()}`
   return NextResponse.json({
-    ok:       true,
-    status:   'preview',
-    fileId:   newFileId,
-    total:    parsed.length,
+    ok: true, status: 'preview',
+    fileId:    newFileId,
+    total:     parsed.length,
     questions: parsed,
-  })
-}
-
-// ── บันทึกข้อสอบลง Supabase ─────────────────────────────────────
-async function doImport(
-  sb: any,
-  questions: any[],
-  meta: { school?: string; subject?: string; year?: string; fileName?: string; fileId?: string }
-) {
-  const rows = questions.map((q: any) => ({
-    school:  meta.school  || 'ไม่ระบุ',
-    year:    meta.year    || '2566',
-    subject: meta.subject || 'ไม่ระบุ',
-    level:   'ปานกลาง',
-    text:    q.text,
-    opt_a:   q.opt_a || '',
-    opt_b:   q.opt_b || '',
-    opt_c:   q.opt_c || '',
-    opt_d:   q.opt_d || '',
-    ans:     typeof q.ans === 'number' && q.ans >= 0 ? q.ans : 0,
-    explain: q.explain || '',
-    source:  `pdf:${meta.fileName || meta.fileId || 'upload'}`,
-  }))
-
-  const { data, error } = await sb.from('questions').insert(rows).select('id')
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({
-    ok:       true,
-    status:   'imported',
-    imported: data?.length || rows.length,
-    message:  `เพิ่มข้อสอบ ${data?.length || rows.length} ข้อเรียบร้อย`,
+    message:   `พบข้อสอบ ${parsed.length} ข้อ — ตรวจสอบก่อนยืนยัน`,
   })
 }

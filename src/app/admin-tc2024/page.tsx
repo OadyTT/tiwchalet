@@ -177,16 +177,52 @@ export default function AdminPage() {
   const onPdfFile = async (e:React.ChangeEvent<HTMLInputElement>) => {
     const file=e.target.files?.[0]; if(!file) return; e.target.value=''
     setPdfStep('reading'); setPdfMsg(`อ่านไฟล์ ${file.name}...`); setPdfErr('')
-    const b64 = await new Promise<string>((res,rej)=>{
-      const r=new FileReader(); r.onload=ev=>res((ev.target?.result as string).split(',')[1]); r.onerror=()=>rej(new Error('อ่านไม่ได้')); r.readAsDataURL(file)
-    })
-    setPdfStep('parsing'); setPdfMsg('AI กำลังวิเคราะห์ข้อสอบ... (~10-30 วินาที)')
     try {
-      const res  = await fetch('/api/import-pdf',{method:'POST',headers:{'Content-Type':'application/json','x-admin-pin':pin},body:JSON.stringify({fileBase64:b64,fileName:file.name,...pdfMeta})})
+      const b64 = await new Promise<string>((res,rej)=>{
+        const r=new FileReader(); r.onload=ev=>res((ev.target?.result as string).split(',')[1]); r.onerror=()=>rej(new Error('อ่านไม่ได้')); r.readAsDataURL(file)
+      })
+      setPdfStep('parsing'); setPdfMsg('กำลังอ่านและวิเคราะห์ข้อสอบ...')
+      const res  = await fetch('/api/import-pdf',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-admin-pin':pin},
+        body:JSON.stringify({fileBase64:b64,fileName:file.name,...pdfMeta})
+      })
+
+      // ตรวจสอบ HTTP status ก่อน parse JSON
+      if(!res.ok) {
+        const txt = await res.text()
+        throw new Error(`Server error ${res.status}: ${txt.slice(0,200)}`)
+      }
+
       const data = await res.json()
       if(!data.ok) throw new Error(data.error||'เกิดข้อผิดพลาด')
-      setPdfFileId(data.fileId); setPdfQs(data.questions||[]); setPdfStep('preview'); setPdfMsg(`พบ ${data.total} ข้อ — ตรวจสอบก่อนยืนยัน`)
-    } catch(err:any){ setPdfStep('error'); setPdfErr(err.message) }
+
+      if(data.status==='scanned') {
+        // PDF สแกน
+        setPdfStep('error')
+        setPdfErr(`⚠️ ${data.message}
+
+${data.howTo}`)
+      } else if(data.status==='text_only') {
+        // อ่านได้แต่ parse ไม่ได้
+        setPdfStep('error')
+        setPdfErr(`📄 ${data.message}
+
+${data.howTo}
+
+ข้อความที่พบ:
+${data.rawText||''}`)
+      } else if(data.status==='preview') {
+        // parse สำเร็จ
+        setPdfFileId(data.fileId||''); setPdfQs(data.questions||[])
+        setPdfStep('preview'); setPdfMsg(`พบ ${data.total} ข้อ — ตรวจสอบก่อนยืนยัน`)
+      } else {
+        throw new Error('Response ไม่ถูกต้อง: '+JSON.stringify(data).slice(0,100))
+      }
+    } catch(err:any){
+      setPdfStep('error')
+      setPdfErr(err.message)
+    }
   }
 
   const confirmPdf = async () => {
@@ -397,7 +433,7 @@ export default function AdminPage() {
                 <div style={{fontSize:40,marginBottom:10}}>📄</div>
                 <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>คลิกเพื่อเลือกไฟล์ PDF</div>
                 <div style={{fontSize:13,color:C.muted,marginBottom:8}}>รองรับ PDF พิมพ์ · parse อัตโนมัติ</div>
-                <div style={{fontSize:11,color:'#94a3b8'}}>⚠️ ต้องตั้ง ANTHROPIC_API_KEY ใน Vercel</div>
+                <div style={{fontSize:11,color:'#94a3b8'}}>รองรับ PDF ที่พิมพ์จากคอมพิวเตอร์ (ไม่ใช่สแกน)</div>
               </div>
             )}
 
@@ -411,7 +447,7 @@ export default function AdminPage() {
             {pdfStep==='error'&&(
               <div style={{background:C.redL,border:'1px solid #fca5a5',borderRadius:14,padding:'20px',textAlign:'center'}}>
                 <div style={{fontSize:32,marginBottom:8}}>❌</div>
-                <div style={{fontSize:14,color:'#991b1b',marginBottom:10}}>{pdfErr}</div>
+                <div style={{fontSize:13,color:'#991b1b',marginBottom:10,whiteSpace:'pre-wrap',lineHeight:1.6}}>{pdfErr}</div>
                 {pdfErr.includes('ANTHROPIC_API_KEY')&&(
                   <div style={{background:C.goldL,borderRadius:9,padding:'10px',fontSize:12,color:'#78350f',textAlign:'left',marginBottom:10}}>
                     💡 Vercel → Settings → Environment Variables<br/>
