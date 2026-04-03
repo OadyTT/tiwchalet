@@ -16,7 +16,9 @@ interface UpgradeReq {
   status:string; created_at:string; amount?:string; slip_image?:string; approved_at?:string
 }
 interface PdfQuestion {
-  text:string; opt_a:string; opt_b:string; opt_c:string; opt_d:string; ans:number; explain:string
+  text:string; opt_a:string; opt_b:string; opt_c:string; opt_d:string
+  ans:number; explain:string; subject?:string; level?:string
+  opts?:string[]; hasAns?:boolean; _idx?:number
 }
 type Tab = 'settings'|'approve'|'questions'|'pdf'|'stats'
 
@@ -181,7 +183,7 @@ export default function AdminPage() {
       const b64 = await new Promise<string>((res,rej)=>{
         const r=new FileReader(); r.onload=ev=>res((ev.target?.result as string).split(',')[1]); r.onerror=()=>rej(new Error('อ่านไม่ได้')); r.readAsDataURL(file)
       })
-      setPdfStep('parsing'); setPdfMsg('กำลังอ่านและวิเคราะห์ข้อสอบ...')
+      setPdfStep('parsing'); setPdfMsg('กำลังอ่านและวิเคราะห์ข้อสอบ (รองรับหลายวิชา)...')
       const res  = await fetch('/api/import-pdf',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-admin-pin':pin},
@@ -468,42 +470,89 @@ ${data.rawText||''}`)
 
             {pdfStep==='preview'&&pdfQs.length>0&&(
               <div>
-                <div style={{background:C.blueL,border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
-                  <div><div style={{fontSize:14,fontWeight:700,color:'#1e40af'}}>พบ {pdfQs.length} ข้อ</div><div style={{fontSize:12,color:'#1d4ed8'}}>ตรวจสอบก่อนยืนยัน (คลิก แก้ไข เพื่อแก้แต่ละข้อ)</div></div>
-                  <div style={{display:'flex',gap:8}}>
-                    <button onClick={()=>{setPdfStep('idle');setPdfQs([])}} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>ยกเลิก</button>
-                    <button onClick={confirmPdf} style={{padding:'7px 14px',borderRadius:8,border:'none',background:C.navy,color:'#fff',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600}}>✓ ยืนยัน {pdfQs.length} ข้อ</button>
+                {/* Summary banner */}
+                <div style={{background:C.blueL,border:'1px solid #bfdbfe',borderRadius:12,padding:'12px 14px',marginBottom:12}}>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#1e40af',marginBottom:4}}>พบ {pdfQs.length} ข้อ</div>
+                      {/* แสดง grouping ตามวิชา */}
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {Object.entries(pdfQs.reduce((acc:Record<string,number>,q:any)=>{acc[q.subject||'ไม่ระบุ']=(acc[q.subject||'ไม่ระบุ']||0)+1;return acc},{})).map(([subj,cnt])=>(
+                          <span key={subj} style={{fontSize:11,padding:'2px 8px',borderRadius:20,background:'#fff',border:'1px solid #bfdbfe',color:'#1e40af',fontWeight:600}}>{subj} {cnt as number} ข้อ</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:8}}>
+                      <button onClick={()=>{setPdfStep('idle');setPdfQs([])}} style={{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',fontFamily:'inherit',fontSize:12}}>ยกเลิก</button>
+                      <button onClick={confirmPdf} style={{padding:'7px 14px',borderRadius:8,border:'none',background:C.navy,color:'#fff',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600}}>✓ ยืนยัน {pdfQs.length} ข้อ</button>
+                    </div>
                   </div>
                 </div>
 
-                {pdfQs.map((q,i)=>(
-                  <div key={i} style={{background:'#fff',border:`1px solid ${editIdx===i?C.navy:C.border}`,borderRadius:12,marginBottom:8,overflow:'hidden'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',cursor:'pointer'}} onClick={()=>setEditIdx(editIdx===i?null:i)}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:'flex',gap:6,marginBottom:3}}>
-                          <span style={{fontSize:11,fontWeight:700,background:'#f1f5f9',color:C.muted,padding:'1px 7px',borderRadius:5}}>ข้อ {i+1}</span>
-                          {q.ans>=0&&<span style={{fontSize:11,background:C.greenL,color:C.greenD,padding:'1px 7px',borderRadius:5}}>เฉลย: {OPTS[q.ans]}</span>}
-                        </div>
-                        <div style={{fontSize:13,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.text||'(ไม่มีโจทย์)'}</div>
-                      </div>
-                      <div style={{display:'flex',gap:6,flexShrink:0,marginLeft:8}}>
-                        <button onClick={e=>{e.stopPropagation();setEditIdx(editIdx===i?null:i)}} style={{fontSize:11,padding:'4px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',fontFamily:'inherit'}}>แก้ไข</button>
-                        <button onClick={e=>{e.stopPropagation();setPdfQs(p=>p.filter((_,j)=>j!==i))}} style={{fontSize:11,padding:'4px 8px',borderRadius:6,border:'1px solid #fca5a5',background:C.redL,color:C.red,cursor:'pointer',fontFamily:'inherit'}}>ลบ</button>
-                      </div>
+                {/* แสดงข้อสอบแยกตามวิชา */}
+                {Object.entries(pdfQs.reduce((acc:Record<string,any[]>,q:any,i:number)=>{
+                  const subj=q.subject||'ไม่ระบุ'; if(!acc[subj]) acc[subj]=[]; acc[subj].push({...q,_idx:i}); return acc
+                },{})).map(([subj,qs])=>(
+                  <div key={subj} style={{marginBottom:14}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:8,display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{padding:'3px 10px',borderRadius:20,background:C.navy,color:'#fff',fontSize:12}}>{subj}</span>
+                      <span style={{color:C.muted,fontSize:12}}>{(qs as any[]).length} ข้อ</span>
+                      {/* ปุ่มเปลี่ยนวิชาทั้ง group */}
+                      <select
+                        value={subj}
+                        onChange={e=>{const ns=e.target.value; setPdfQs(p=>p.map(q=>q.subject===subj?{...q,subject:ns}:q))}}
+                        style={{fontSize:11,padding:'2px 6px',borderRadius:6,border:`1px solid ${C.border}`,background:'#fff',fontFamily:'inherit',color:C.muted,marginLeft:'auto'}}>
+                        {['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English','สังคมศึกษา','ไม่ระบุ'].map(s=><option key={s}>{s}</option>)}
+                      </select>
                     </div>
-                    {editIdx===i&&(
-                      <div style={{padding:'12px 14px',borderTop:`1px solid ${C.border}`}}>
-                        <F label="โจทย์"><textarea value={q.text} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,text:e.target.value}:x))} rows={2} {...IS as any}/></F>
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                          {(['opt_a','opt_b','opt_c','opt_d'] as const).map((k,oi)=>(
-                            <F key={k} label={`${OPTS[oi]}${q.ans===oi?' ✓ (เฉลย)':''}`}>
-                              <input value={q[k]||''} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,[k]:e.target.value}:x))} onFocus={()=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,ans:oi}:x))} style={{...IS.style,borderColor:q.ans===oi?C.green:undefined,background:q.ans===oi?C.greenL:undefined}}/>
-                            </F>
-                          ))}
+                    {(qs as any[]).map((q:any)=>{
+                      const i=q._idx
+                      return (
+                        <div key={i} style={{background:'#fff',border:`1px solid ${editIdx===i?C.navy:C.border}`,borderRadius:12,marginBottom:6,overflow:'hidden'}}>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',cursor:'pointer'}} onClick={()=>setEditIdx(editIdx===i?null:i)}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:'flex',gap:5,marginBottom:3,flexWrap:'wrap'}}>
+                                <span style={{fontSize:10,fontWeight:700,background:'#f1f5f9',color:C.muted,padding:'1px 6px',borderRadius:4}}>ข้อ {i+1}</span>
+                                {q.hasAns!==false&&q.ans>=0
+                                  ?<span style={{fontSize:10,background:C.greenL,color:C.greenD,padding:'1px 6px',borderRadius:4}}>เฉลย {OPTS[q.ans]}</span>
+                                  :<span style={{fontSize:10,background:'#fef3c7',color:'#92400e',padding:'1px 6px',borderRadius:4}}>ไม่มีเฉลย</span>
+                                }
+                              </div>
+                              <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{q.text||'(ไม่มีโจทย์)'}</div>
+                            </div>
+                            <div style={{display:'flex',gap:5,flexShrink:0,marginLeft:8}}>
+                              <button onClick={ev=>{ev.stopPropagation();setEditIdx(editIdx===i?null:i)}} style={{fontSize:10,padding:'3px 7px',borderRadius:5,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',fontFamily:'inherit'}}>แก้ไข</button>
+                              <button onClick={ev=>{ev.stopPropagation();setPdfQs(p=>p.filter((_,j)=>j!==i))}} style={{fontSize:10,padding:'3px 7px',borderRadius:5,border:'1px solid #fca5a5',background:C.redL,color:C.red,cursor:'pointer',fontFamily:'inherit'}}>ลบ</button>
+                            </div>
+                          </div>
+                          {editIdx===i&&(
+                            <div style={{padding:'10px 12px',borderTop:`1px solid ${C.border}`}}>
+                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                                <F label="วิชา">
+                                  <select value={q.subject||'ไม่ระบุ'} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,subject:e.target.value}:x))} {...IS}>
+                                    {['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English','สังคมศึกษา','ไม่ระบุ'].map(s=><option key={s}>{s}</option>)}
+                                  </select>
+                                </F>
+                                <F label="ระดับ">
+                                  <select value={q.level||'ปานกลาง'} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,level:e.target.value}:x))} {...IS}>
+                                    {['ง่าย','ปานกลาง','ยาก','ยากมาก'].map(l=><option key={l}>{l}</option>)}
+                                  </select>
+                                </F>
+                              </div>
+                              <F label="โจทย์"><textarea value={q.text} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,text:e.target.value}:x))} rows={2} {...IS as any}/></F>
+                              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                                {(['opt_a','opt_b','opt_c','opt_d'] as const).map((k,oi)=>(
+                                  <F key={k} label={`${OPTS[oi]}${q.ans===oi?' ✓':''}`}>
+                                    <input value={q[k]||''} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,[k]:e.target.value}:x))} onFocus={()=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,ans:oi}:x))} style={{...IS.style,borderColor:q.ans===oi?C.green:undefined,background:q.ans===oi?C.greenL:undefined}}/>
+                                  </F>
+                                ))}
+                              </div>
+                              <F label="คำอธิบายเฉลย"><input value={q.explain||''} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,explain:e.target.value}:x))} {...IS}/></F>
+                            </div>
+                          )}
                         </div>
-                        <F label="คำอธิบาย"><input value={q.explain||''} onChange={e=>setPdfQs(p=>p.map((x,j)=>j===i?{...x,explain:e.target.value}:x))} {...IS}/></F>
-                      </div>
-                    )}
+                      )
+                    })}
                   </div>
                 ))}
 
