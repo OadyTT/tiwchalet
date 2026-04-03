@@ -223,55 +223,119 @@ export default function AdminPage() {
     finally{ setBacking(false) }
   }
 
-  // ── PDF flow ──
+  // ── PDF flow — รองรับทั้งพิมพ์และสแกน (Tesseract OCR) ──
+  const extractTextFromPdf = async (
+    file: File,
+    onProgress: (msg: string) => void
+  ): Promise<string> => {
+    const arrayBuffer = await file.arrayBuffer()
+    onProgress('โหลด PDF reader...')
+    const pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const numPages = pdf.numPages
+
+    // ลองอ่าน text ปกติก่อน
+    onProgress(`PDF ${numPages} หน้า — อ่านข้อความ...`)
+    let fullText = ''
+    for (let p = 1; p <= numPages; p++) {
+      const page    = await pdf.getPage(p)
+      const content = await page.getTextContent()
+      fullText += content.items.map((item: any) => item.str || '').join(' ') + '\n'
+    }
+
+    // ถ้ามีข้อความเพียงพอ = PDF พิมพ์ ไม่ต้อง OCR
+    if (fullText.replace(/\s/g, '').length >= 80) {
+      onProgress('อ่านข้อความสำเร็จ')
+      return fullText
+    }
+
+    // PDF สแกน — โหลด Tesseract OCR จาก CDN
+    onProgress('PDF สแกน — กำลังโหลด OCR engine (ครั้งแรกอาจใช้เวลา ~30 วิ)...')
+    await new Promise<void>((resolve, reject) => {
+      if ((window as any).Tesseract) { resolve(); return }
+      const script = document.createElement('script')
+      script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('โหลด OCR engine ไม่ได้ ตรวจสอบ internet แล้วลองใหม่'))
+      document.head.appendChild(script)
+    })
+
+    const Tesseract = (window as any).Tesseract
+    onProgress('OCR engine พร้อม — สร้าง worker...')
+
+    let ocrText = ''
+    const worker = await Tesseract.createWorker('tha+eng', 1, {
+      logger: (m: any) => {
+        if (m.status === 'recognizing text') {
+          onProgress(`OCR กำลังอ่าน... ${Math.round(m.progress * 100)}%`)
+        }
+      }
+    })
+
+    try {
+      for (let p = 1; p <= numPages; p++) {
+        onProgress(`OCR หน้า ${p}/${numPages}...`)
+        const page     = await pdf.getPage(p)
+        const scale    = 2.5
+        const viewport = page.getViewport({ scale })
+        const canvas   = document.createElement('canvas')
+        canvas.width   = viewport.width
+        canvas.height  = viewport.height
+        const ctx      = canvas.getContext('2d')!
+        await page.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport } as any).promise
+        const { data } = await worker.recognize(canvas)
+        ocrText += data.text + '\n'
+      }
+    } finally {
+      await worker.terminate()
+    }
+
+    onProgress('OCR เสร็จ')
+    return ocrText
+  }
+
   const onPdfFile = async (e:React.ChangeEvent<HTMLInputElement>) => {
     const file=e.target.files?.[0]; if(!file) return; e.target.value=''
     setPdfStep('reading'); setPdfMsg(`อ่านไฟล์ ${file.name}...`); setPdfErr('')
     try {
-      const b64 = await new Promise<string>((res,rej)=>{
-        const r=new FileReader(); r.onload=ev=>res((ev.target?.result as string).split(',')[1]); r.onerror=()=>rej(new Error('อ่านไม่ได้')); r.readAsDataURL(file)
-      })
-      setPdfStep('parsing'); setPdfMsg('กำลังอ่านและวิเคราะห์ข้อสอบ (รองรับหลายวิชา)...')
-      const res  = await fetch('/api/import-pdf',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-admin-pin':pin},
-        body:JSON.stringify({fileBase64:b64,fileName:file.name,...pdfMeta})
+      const pdfText = await extractTextFromPdf(file, (msg) => {
+        setPdfMsg(msg)
+        setPdfStep('parsing')
       })
 
-      // ตรวจสอบ HTTP status ก่อน parse JSON
+      setPdfStep('parsing'); setPdfMsg('วิเคราะห์ข้อสอบ...')
+
+      const res = await fetch('/api/import-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
+        body: JSON.stringify({ pdfText, fileName: file.name, ...pdfMeta }),
+      })
+
       if(!res.ok) {
         const txt = await res.text()
         throw new Error(`Server error ${res.status}: ${txt.slice(0,200)}`)
       }
 
       const data = await res.json()
-      if(!data.ok) throw new Error(data.error||'เกิดข้อผิดพลาด')
+      if(!data.ok) throw new Error(data.error || 'เกิดข้อผิดพลาด')
 
       if(data.status==='scanned') {
-        // PDF สแกน
         setPdfStep('error')
-        setPdfErr(`⚠️ ${data.message}
-
-${data.howTo}`)
+        setPdfErr(data.message + '\n\n' + (data.howTo||''))
       } else if(data.status==='text_only') {
-        // อ่านได้แต่ parse ไม่ได้
         setPdfStep('error')
-        setPdfErr(`📄 ${data.message}
-
-${data.howTo}
-
-ข้อความที่พบ:
-${data.rawText||''}`)
+        setPdfErr(`${data.message}\n\n${data.howTo||''}\n\nข้อความที่ OCR ได้:\n${(data.rawText||'').slice(0,600)}`)
       } else if(data.status==='preview') {
-        // parse สำเร็จ
         setPdfFileId(data.fileId||''); setPdfQs(data.questions||[])
-        setPdfStep('preview'); setPdfMsg(`พบ ${data.total} ข้อ — ตรวจสอบก่อนยืนยัน`)
+        setPdfStep('preview'); setPdfMsg(data.message || `พบ ${data.total} ข้อ`)
       } else {
-        throw new Error('Response ไม่ถูกต้อง: '+JSON.stringify(data).slice(0,100))
+        throw new Error('Response ไม่ถูกต้อง')
       }
     } catch(err:any){
       setPdfStep('error')
-      setPdfErr(err.message)
+      setPdfErr(err.message || 'เกิดข้อผิดพลาด')
     }
   }
 
@@ -522,14 +586,20 @@ ${data.rawText||''}`)
                 <div style={{fontSize:40,marginBottom:10}}>📄</div>
                 <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>คลิกเพื่อเลือกไฟล์ PDF</div>
                 <div style={{fontSize:13,color:C.muted,marginBottom:8}}>รองรับ PDF พิมพ์ · parse อัตโนมัติ</div>
-                <div style={{fontSize:11,color:'#94a3b8'}}>รองรับ PDF ที่พิมพ์จากคอมพิวเตอร์ (ไม่ใช่สแกน)</div>
+                <div style={{fontSize:11,color:'#94a3b8'}}>รองรับทั้ง PDF พิมพ์ และ PDF สแกน (OCR อัตโนมัติ)</div>
               </div>
             )}
 
             {(pdfStep==='reading'||pdfStep==='parsing'||pdfStep==='importing')&&(
-              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'28px',textAlign:'center'}}>
-                <div style={{fontSize:32,marginBottom:10}} className="spin">⟳</div>
-                <div style={{fontSize:14,fontWeight:600,color:C.text}}>{pdfMsg}</div>
+              <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'24px 20px',textAlign:'center'}}>
+                <div style={{fontSize:32,marginBottom:12}} className="spin">⟳</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6}}>{pdfMsg}</div>
+                {pdfStep==='parsing'&&pdfMsg.includes('OCR')&&(
+                  <div style={{background:'#f0fdf4',border:'1px solid #86efac',borderRadius:9,padding:'8px 12px',fontSize:12,color:'#14532d',marginTop:8}}>
+                    🔬 กำลังใช้ OCR อ่านข้อความจากภาพ — อาจใช้เวลา 1-3 นาที/หน้า<br/>
+                    <span style={{opacity:.7}}>ขึ้นอยู่กับความละเอียดและจำนวนหน้า</span>
+                  </div>
+                )}
               </div>
             )}
 
