@@ -116,6 +116,12 @@ export async function GET(req: NextRequest) {
         level: r.level, text: r.text,
         opts: [r.opt_a, r.opt_b, r.opt_c, r.opt_d],
         ans: r.ans, explain: r.explain || '',
+        image_url:   r.image_url   || '',
+        opt_a_img:   r.opt_a_img   || '',
+        opt_b_img:   r.opt_b_img   || '',
+        opt_c_img:   r.opt_c_img   || '',
+        opt_d_img:   r.opt_d_img   || '',
+        explain_img: r.explain_img || '',
       }))
     }
   } catch (_) {}
@@ -155,7 +161,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}))
-  const { school, year, subject, level, text, opt_a, opt_b, opt_c, opt_d, ans, explain, source } = body
+  const { school, year, subject, level, text, opt_a, opt_b, opt_c, opt_d, ans, explain, source, image_url, opt_a_img, opt_b_img, opt_c_img, opt_d_img, explain_img } = body
 
   if (!school || !subject || !text || !opt_a || !opt_b) {
     return NextResponse.json({ ok: false, error: 'กรุณากรอกข้อมูลให้ครบ (โรงเรียน วิชา โจทย์ ตัวเลือก ก ข)' }, { status: 400 })
@@ -165,8 +171,14 @@ export async function POST(req: NextRequest) {
     school, year: year || '2566', subject, level: level || 'ปานกลาง',
     text, opt_a, opt_b, opt_c: opt_c || '', opt_d: opt_d || '',
     ans: typeof ans === 'number' ? ans : 0,
-    explain: explain || '',
-    source: source || 'admin',
+    explain:     explain     || '',
+    source:      source      || 'admin',
+    image_url:   image_url   || '',
+    opt_a_img:   opt_a_img   || '',
+    opt_b_img:   opt_b_img   || '',
+    opt_c_img:   opt_c_img   || '',
+    opt_d_img:   opt_d_img   || '',
+    explain_img: explain_img || '',
   }).select('id').single()
 
   if (error) {

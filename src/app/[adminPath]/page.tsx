@@ -61,6 +61,41 @@ const Btn = ({onClick,disabled,color='navy',children}:{onClick:()=>void;disabled
   return <button onClick={onClick} disabled={disabled} style={{padding:'9px 16px',borderRadius:9,border:'none',background:disabled?'#94a3b8':bg,color:'#fff',fontSize:13,fontWeight:600,cursor:disabled?'default':'pointer',fontFamily:'inherit'}}>{children}</button>
 }
 
+// ── ImgUpload component ──────────────────────────────────
+function ImgUpload({label,value,onChange,onFile,highlight=false}:{
+  label:string; value:string; onChange:(v:string)=>void
+  onFile:(f:File)=>void; highlight?:boolean
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const C2  = { border:'#e2e8f0', muted:'#64748b', green:'#16a34a' }
+
+  const onPaste = (e:React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData.items).find(i=>i.type.startsWith('image/'))
+    if(item) { e.preventDefault(); const f=item.getAsFile(); if(f) onFile(f) }
+  }
+
+  return (
+    <div style={{marginBottom:6}}>
+      <div style={{fontSize:11,color:highlight?C2.green:C2.muted,fontWeight:highlight?700:400,marginBottom:3}}>{label}</div>
+      {value ? (
+        <div style={{position:'relative',display:'inline-block',width:'100%'}}>
+          <img src={value} alt={label} style={{width:'100%',maxHeight:100,objectFit:'contain',borderRadius:7,border:`1.5px solid ${highlight?C2.green:C2.border}`,display:'block'}}/>
+          <button onClick={()=>onChange('')}
+            style={{position:'absolute',top:3,right:3,width:20,height:20,borderRadius:10,border:'none',background:'rgba(0,0,0,.5)',color:'#fff',fontSize:11,cursor:'pointer',lineHeight:1,padding:0}}>✕</button>
+        </div>
+      ) : (
+        <div onPaste={onPaste}
+          onClick={()=>ref.current?.click()}
+          style={{border:`1.5px dashed ${highlight?C2.green:C2.border}`,borderRadius:7,padding:'8px',textAlign:'center',cursor:'pointer',fontSize:10,color:C2.muted,background:highlight?'#f0fdf4':'#fafafa'}}>
+          📋 Ctrl+V วาง · หรือ คลิกเลือกไฟล์
+        </div>
+      )}
+      <input ref={ref} type="file" accept="image/*" style={{display:'none'}}
+        onChange={e=>{ const f=e.target.files?.[0]; if(f){onFile(f); e.target.value=''} }}/>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const [pin,    setPin]    = useState('')
   const [authed, setAuthed] = useState(false)
@@ -76,7 +111,7 @@ export default function AdminPage() {
 
   // questions tab
   const [questions,setQuestions]=useState<any[]>([])
-  const [newQ,setNewQ]=useState({school:'สวนกุหลาบ',year:'2566',subject:'คณิตศาสตร์',level:'ปานกลาง',text:'',optA:'',optB:'',optC:'',optD:'',ans:0,explain:''})
+  const [newQ,setNewQ]=useState({school:'สวนกุหลาบ',year:'2566',subject:'คณิตศาสตร์',level:'ปานกลาง',text:'',optA:'',optB:'',optC:'',optD:'',ans:0,explain:'',imageUrl:'',optAImg:'',optBImg:'',optCImg:'',optDImg:'',explainImg:''})
   const [addingQ,setAddingQ]=useState(false)
 
   // pdf tab
@@ -187,6 +222,28 @@ export default function AdminPage() {
     finally{ setApproving(null) }
   }
 
+  // Helper: อ่านรูปจาก file/paste แล้ว resize เป็น max 800px
+  const readAndResizeImage = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    if (file.size > 5 * 1024 * 1024) { reject(new Error('รูปใหญ่เกิน 5MB')); return }
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 800
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
+      }
+      img.onerror = () => reject(new Error('อ่านรูปไม่ได้'))
+      img.src = ev.target!.result as string
+    }
+    reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'))
+    reader.readAsDataURL(file)
+  })
+
   const addQuestion = async () => {
     if(!newQ.text||!newQ.optA) return
     setAddingQ(true)
@@ -206,7 +263,7 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if(!data.ok) throw new Error(data.error||'เกิดข้อผิดพลาด')
-      setNewQ(p=>({...p,text:'',optA:'',optB:'',optC:'',optD:'',explain:'',ans:0}))
+      setNewQ(p=>({...p,text:'',optA:'',optB:'',optC:'',optD:'',explain:'',ans:0,imageUrl:'',optAImg:'',optBImg:'',optCImg:'',optDImg:'',explainImg:''}))
       await loadAll(pin)
       alert('✅ '+data.message)
     } catch(e:any){ alert('Error: '+e.message) }

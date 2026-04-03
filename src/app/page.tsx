@@ -15,7 +15,7 @@ type Screen = 'home'|'pick'|'exam'|'result'|'progress'|'upgrade'|'settings'|'com
 type Plan   = 'trial' | 'full'
 type PinFor = 'parent' | 'full'
 
-interface Question { id:string; text:string; opts?:string[]; opt_a?:string; opt_b?:string; opt_c?:string; opt_d?:string; ans:number; explain:string; subject:string; school:string; year:string; level:string }
+interface Question { id:string; text:string; opts?:string[]; opt_a?:string; opt_b?:string; opt_c?:string; opt_d?:string; ans:number; explain:string; subject:string; school:string; year:string; level:string; image_url?:string; opt_a_img?:string; opt_b_img?:string; opt_c_img?:string; opt_d_img?:string; explain_img?:string }
 interface ExamResult { id:string; school:string; subject:string; year:string; score:number; total:number; pct:number; timeUsed:number; plan:Plan; createdAt:string }
 interface AppCfg { childName:string; childAvatarUrl:string; childTargetSchool:string; qrCodeImageUrl:string; adminPhone:string; adminEmail:string; adminLineId:string; fullVersionPrice:string; fullVersionDays:number }
 interface BackupLog { last_backup:string; rows_results:number; gas_ok:boolean }
@@ -133,7 +133,7 @@ function PaymentModal({cfg,onClose}:{cfg:AppCfg|null;onClose:()=>void}) {
     catch{alert('เชื่อมต่อไม่ได้')}finally{setSending(false)}
   }
   const IS={style:{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontFamily:'inherit',fontSize:14,color:C.text,outline:'none',marginBottom:10} as React.CSSProperties}
-  const price=cfg?.fullVersionPrice||'299'; const days=cfg?.fullVersionDays||30
+  const price=cfg?.fullVersionPrice||'299'; const days=cfg?.fullVersionDays||45
   const lineId=cfg?.adminLineId||'Oady'; const phone=cfg?.adminPhone||'-'
   const email=cfg?.adminEmail||'thitiphankk@gmail.com'; const qr=cfg?.qrCodeImageUrl||''
 
@@ -257,6 +257,14 @@ export default function Home() {
   const [backupBusy,setBackupBusy]=useState(false)
   const [backupMsg,setBackupMsg]=useState('')
   const [editingProfile,setEditingProfile]=useState(false)
+  const [showProfileModal,setShowProfileModal]=useState(false)  // modal overlay
+  const [showRestoreModal,setShowRestoreModal]=useState(false)
+  const [showReportModal,setShowReportModal]=useState(false)
+  const [restoreId,setRestoreId]=useState('')
+  const [restoreBusy,setRestoreBusy]=useState(false)
+  const [restoreMsg,setRestoreMsg]=useState('')
+  const [cropMode,setCropMode]=useState(false)
+  const canvasRef = typeof window !== 'undefined' ? null : null
   const [editName,setEditName]=useState('')
   const [editAvatar,setEditAvatar]=useState('')
   const [savingProfile,setSavingProfile]=useState(false)
@@ -311,7 +319,7 @@ export default function Home() {
   }
   const lockParent=()=>{setMode('student');setParentPin('')}
   const unlockFull=(_tok:string,data?:any)=>{
-    const days=data?.fullVersionDays||30
+    const days=data?.fullVersionDays||45
     const exp=new Date();exp.setDate(exp.getDate()+days)
     setPlan('full');setFullExpiry(exp.toISOString());setShowPin(false)
     setActiveSchools(ALL_SCHOOLS) // full version เปิดทุกโรงเรียน
@@ -475,10 +483,250 @@ export default function Home() {
         </div>
       )}
 
+      {/* ── PROFILE MODAL (overlay จากทุก screen) ── */}
+      {showProfileModal&&mode==='parent'&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:800,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,padding:'24px 20px',width:'100%',maxWidth:360,maxHeight:'90dvh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.text}}>แก้ไขข้อมูลนักเรียน</div>
+              <button onClick={()=>setShowProfileModal(false)} style={{background:'none',border:'none',fontSize:24,cursor:'pointer',color:C.muted}}>×</button>
+            </div>
+            {/* รูป preview + resize */}
+            <div style={{textAlign:'center',marginBottom:16}}>
+              {editAvatar?(
+                <div style={{position:'relative',display:'inline-block'}}>
+                  <img id="profilePreview" src={editAvatar} alt="" style={{width:120,height:120,borderRadius:24,objectFit:'cover',border:`3px solid ${C.green}`,display:'block'}}/>
+                  <div style={{fontSize:11,color:C.muted,marginTop:6}}>รูปตัวอย่าง 120×120px</div>
+                </div>
+              ):(
+                <div style={{width:120,height:120,borderRadius:24,background:`linear-gradient(135deg,${C.blueL},${C.greenL})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:56,margin:'0 auto',border:`3px solid ${C.green}`}}>🧒</div>
+              )}
+            </div>
+            {/* Upload รูป */}
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:600,color:C.muted,display:'block',marginBottom:6}}>รูปโปรไฟล์</label>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                <button onClick={()=>{const inp=document.getElementById('pmAvatarFile') as HTMLInputElement;inp?.click()}}
+                  style={{padding:'10px 8px',borderRadius:10,border:`2px dashed #cbd5e1`,background:'#fafafa',cursor:'pointer',fontFamily:'inherit',fontSize:12,color:C.muted,fontWeight:500}}>
+                  📷 เลือกรูป JPG<br/><span style={{fontSize:10,opacity:.7}}>≤ 1 MB</span>
+                </button>
+                <input value={editAvatar.startsWith('data:')?'':editAvatar}
+                  onChange={e=>setEditAvatar(e.target.value)}
+                  placeholder="URL รูปภาพ"
+                  style={{padding:'8px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:12,color:C.text,outline:'none',fontFamily:'inherit'}}/>
+              </div>
+              <input id="pmAvatarFile" type="file" accept="image/jpeg,image/jpg,image/png,image/webp" style={{display:'none'}} onChange={e=>{
+                const file=e.target.files?.[0]; if(!file) return
+                if(file.size>1024*1024){alert('ไฟล์ใหญ่เกิน 1 MB');return}
+                // Resize รูปลงเป็น 400x400 ก่อนบันทึก
+                const img=new Image(); const url=URL.createObjectURL(file)
+                img.onload=()=>{
+                  const SIZE=400
+                  const canvas=document.createElement('canvas')
+                  canvas.width=SIZE; canvas.height=SIZE
+                  const ctx=canvas.getContext('2d')!
+                  const s=Math.min(img.width,img.height)
+                  const sx=(img.width-s)/2; const sy=(img.height-s)/2
+                  ctx.drawImage(img,sx,sy,s,s,0,0,SIZE,SIZE)
+                  setEditAvatar(canvas.toDataURL('image/jpeg',0.85))
+                  URL.revokeObjectURL(url)
+                }
+                img.src=url
+              }}/>
+              <div style={{fontSize:10,color:C.muted}}>รองรับ JPG/PNG · auto resize เป็น 400×400px · crop จากกึ่งกลาง</div>
+            </div>
+            {/* ชื่อ */}
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:12,fontWeight:600,color:C.muted,display:'block',marginBottom:6}}>ชื่อนักเรียน</label>
+              <input value={editName} onChange={e=>setEditName(e.target.value)}
+                style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:fs,color:C.text,outline:'none',fontFamily:'inherit'}}/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <button onClick={()=>setShowProfileModal(false)}
+                style={{padding:'11px',borderRadius:11,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:fs-1,cursor:'pointer',fontFamily:'inherit'}}>ยกเลิก</button>
+              <button onClick={async()=>{await saveProfile();setShowProfileModal(false)}} disabled={savingProfile}
+                style={{padding:'11px',borderRadius:11,border:'none',background:savingProfile?'#94a3b8':C.green,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:savingProfile?'default':'pointer',fontFamily:'inherit'}}>
+                {savingProfile?'กำลังบันทึก...':'💾 บันทึก'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RESTORE MODAL ── */}
+      {showRestoreModal&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:800,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,padding:'24px 20px',width:'100%',maxWidth:360}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.text}}>♻️ Restore ข้อมูล</div>
+              <button onClick={()=>{setShowRestoreModal(false);setRestoreMsg('')}} style={{background:'none',border:'none',fontSize:24,cursor:'pointer',color:C.muted}}>×</button>
+            </div>
+            <div style={{background:C.blueL,border:`1px solid #bfdbfe`,borderRadius:10,padding:'10px 12px',marginBottom:14,fontSize:12,color:'#1e40af'}}>
+              <div style={{fontWeight:600,marginBottom:3}}>แบบที่ 1 — Restore ประวัติตัวเอง</div>
+              ใส่ CustomerID เก่า (เช่น CUS-LKJ3X-A1B2) เพื่อดึงประวัติผลสอบกลับมา
+            </div>
+            <div style={{marginBottom:8}}>
+              <label style={{fontSize:12,fontWeight:600,color:C.muted,display:'block',marginBottom:5}}>CustomerID</label>
+              <input value={restoreId} onChange={e=>setRestoreId(e.target.value.toUpperCase())}
+                placeholder="CUS-XXXXX-XXXX"
+                style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:14,fontFamily:'monospace',color:C.text,outline:'none'}}/>
+              <div style={{fontSize:10,color:C.muted,marginTop:4}}>CustomerID อยู่ใน Settings → ข้อมูลนักเรียน</div>
+            </div>
+            {restoreMsg&&<div style={{fontSize:13,padding:'8px 10px',borderRadius:9,background:restoreMsg.startsWith('✅')?C.greenL:C.redL,color:restoreMsg.startsWith('✅')?C.greenD:C.red,marginBottom:10,lineHeight:1.5}}>{restoreMsg}</div>}
+            <button onClick={async()=>{
+              if(!restoreId.trim()){setRestoreMsg('❌ กรุณาใส่ CustomerID');return}
+              setRestoreBusy(true);setRestoreMsg('')
+              try{
+                const res=await fetch('/api/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({customerId:restoreId.trim(),mode:'self'})})
+                const data=await res.json()
+                if(data.ok){
+                  setHistory(data.history||[])
+                  setRestoreMsg(`✅ ${data.message}`)
+                  setTimeout(()=>setShowRestoreModal(false),2000)
+                }else{setRestoreMsg('❌ '+data.error)}
+              }catch{setRestoreMsg('❌ เชื่อมต่อไม่ได้')}
+              finally{setRestoreBusy(false)}
+            }} disabled={restoreBusy}
+              style={{width:'100%',padding:'12px',borderRadius:11,border:'none',background:restoreBusy?'#94a3b8':C.navy,color:'#fff',fontSize:14,fontWeight:600,cursor:restoreBusy?'default':'pointer',fontFamily:'inherit'}}>
+              {restoreBusy?<><span className="spin">⟳</span> กำลัง Restore...</>:'♻️ Restore ประวัติ'}
+            </button>
+            <div style={{marginTop:12,padding:'10px 12px',background:'#f8fafc',borderRadius:9,fontSize:11,color:C.muted}}>
+              CustomerID ของ device นี้: <strong style={{fontFamily:'monospace',fontSize:12,color:C.text}}>{customerId}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── REPORT MODAL — A4 JPG ── */}
+      {showReportModal&&mode==='parent'&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.8)',zIndex:900,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',overflowY:'auto',padding:'20px 16px'}}>
+          <div style={{width:'100%',maxWidth:500,marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{color:'#fff',fontSize:16,fontWeight:700}}>📄 รายงานผลการเรียน</div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{
+                const el=document.getElementById('reportA4')
+                if(!el) return
+                import('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js' as any).catch(()=>{}).then(()=>{
+                  const h2c=(window as any).html2canvas
+                  if(!h2c){alert('กรุณารอสักครู่แล้วลองใหม่');return}
+                  h2c(el,{scale:2,useCORS:true,backgroundColor:'#ffffff'}).then((canvas:any)=>{
+                    const link=document.createElement('a')
+                    link.download=`รายงาน-${childName}-${new Date().toLocaleDateString('th-TH').replace(/\//g,'-')}.jpg`
+                    link.href=canvas.toDataURL('image/jpeg',0.92)
+                    link.click()
+                  })
+                })
+              }} style={{padding:'7px 14px',borderRadius:8,border:'none',background:'#16a34a',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                💾 บันทึก JPG
+              </button>
+              <button onClick={()=>setShowReportModal(false)} style={{padding:'7px 12px',borderRadius:8,border:'1px solid rgba(255,255,255,.3)',background:'transparent',color:'#fff',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>✕ ปิด</button>
+            </div>
+          </div>
+
+          {/* A4 Report Card */}
+          <div id="reportA4" style={{
+            width:595,background:'#fff',borderRadius:4,
+            padding:'32px 36px',fontFamily:'Sarabun,sans-serif',
+            minHeight:842,boxSizing:'border-box',
+          }}>
+            {/* Header */}
+            <div style={{display:'flex',alignItems:'center',gap:16,borderBottom:'3px solid #1e293b',paddingBottom:16,marginBottom:20}}>
+              {cfg?.childAvatarUrl
+                ?<img src={cfg.childAvatarUrl} alt="" style={{width:72,height:72,borderRadius:14,objectFit:'cover',border:'3px solid #16a34a'}}/>
+                :<div style={{width:72,height:72,borderRadius:14,background:'#eff6ff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:36}}>🧒</div>
+              }
+              <div style={{flex:1}}>
+                <div style={{fontSize:22,fontWeight:700,color:'#0f172a',marginBottom:3}}>{childName}</div>
+                <div style={{fontSize:13,color:'#64748b'}}>เป้าหมาย: {cfg?.childTargetSchool||'ติวเข้า ม.1'}</div>
+                <div style={{fontSize:13,color:'#64748b'}}>พิมพ์วันที่ {new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})}</div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:28,fontWeight:800,color:'#1e293b'}}>{history.length?avgPct:'—'}%</div>
+                <div style={{fontSize:12,color:'#64748b'}}>คะแนนเฉลี่ย</div>
+              </div>
+            </div>
+
+            {/* Summary boxes */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:20}}>
+              {[
+                {v:history.length,l:'ชุดที่ทำ',c:'#1d4ed8',bg:'#eff6ff'},
+                {v:history.length?avgPct+'%':'—',l:'คะแนนเฉลี่ย',c:'#16a34a',bg:'#f0fdf4'},
+                {v:history.filter(r=>r.pct>=80).length,l:'ดีมาก ≥80%',c:'#16a34a',bg:'#dcfce7'},
+                {v:history.filter(r=>r.pct<60).length||'✓',l:'ต้องปรับปรุง',c:history.filter(r=>r.pct<60).length?'#dc2626':'#16a34a',bg:history.filter(r=>r.pct<60).length?'#fef2f2':'#dcfce7'},
+              ].map(s=>(
+                <div key={s.l} style={{background:s.bg,borderRadius:10,padding:'10px 8px',textAlign:'center'}}>
+                  <div style={{fontSize:20,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:10,color:s.c,opacity:.8,marginTop:2}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Per-subject */}
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:10,borderLeft:'4px solid #1e293b',paddingLeft:8}}>คะแนนแต่ละวิชา</div>
+              {(['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English'] as const).map(subj=>{
+                const rows=history.filter(r=>r.subject===subj)
+                if(!rows.length) return <div key={subj} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,opacity:.4}}>
+                  <div style={{width:20,fontSize:13}}>{'➗🔬📖🇬🇧'[['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English'].indexOf(subj)]}</div>
+                  <div style={{fontSize:12,width:100}}>{subj}</div>
+                  <div style={{flex:1,height:6,background:'#f1f5f9',borderRadius:3}}/>
+                  <div style={{fontSize:11,color:'#94a3b8',width:40,textAlign:'right'}}>ยังไม่ทำ</div>
+                </div>
+                const avg=Math.round(rows.reduce((a,r)=>a+r.pct,0)/rows.length)
+                const best=Math.max(...rows.map(r=>r.pct))
+                return (<div key={subj} style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <div style={{width:20,fontSize:14}}>{'➗🔬📖🇬🇧'[['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English'].indexOf(subj)]}</div>
+                  <div style={{fontSize:12,fontWeight:600,width:100,color:'#1e293b'}}>{subj}</div>
+                  <div style={{flex:1,height:8,background:'#f1f5f9',borderRadius:4,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${avg}%`,background:avg>=70?'#16a34a':'#dc2626',borderRadius:4}}/>
+                  </div>
+                  <div style={{fontSize:12,fontWeight:700,color:avg>=70?'#16a34a':'#dc2626',width:36,textAlign:'right'}}>{avg}%</div>
+                  <div style={{fontSize:10,color:'#94a3b8',width:48,textAlign:'right'}}>สูงสุด {best}%</div>
+                </div>)
+              })}
+            </div>
+
+            {/* Recent history */}
+            {history.length>0&&(<div style={{marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#0f172a',marginBottom:8,borderLeft:'4px solid #1e293b',paddingLeft:8}}>ประวัติผลสอบล่าสุด (10 ชุด)</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead>
+                  <tr style={{background:'#f8fafc'}}>
+                    {['วันที่','โรงเรียน','วิชา','คะแนน','%'].map(h=>(
+                      <th key={h} style={{padding:'5px 8px',textAlign:'left',color:'#64748b',fontWeight:600,borderBottom:'1px solid #e2e8f0'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.slice(0,10).map((r,i)=>(
+                    <tr key={r.id} style={{background:i%2?'#f8fafc':'#fff'}}>
+                      <td style={{padding:'5px 8px',color:'#64748b'}}>{r.createdAt}</td>
+                      <td style={{padding:'5px 8px',color:'#0f172a',fontWeight:500}}>{r.school}</td>
+                      <td style={{padding:'5px 8px',color:'#64748b'}}>{r.subject}</td>
+                      <td style={{padding:'5px 8px',color:'#0f172a'}}>{r.score}/{r.total}</td>
+                      <td style={{padding:'5px 8px',fontWeight:700,color:r.pct>=70?'#16a34a':'#dc2626'}}>{r.pct}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>)}
+
+            {/* Footer */}
+            <div style={{borderTop:'1px solid #e2e8f0',paddingTop:12,display:'flex',justifyContent:'space-between',fontSize:10,color:'#94a3b8',marginTop:'auto'}}>
+              <span>ติวฉลาด — แอปติวสอบเข้า ม.1</span>
+              <span>CustomerID: {customerId}</span>
+              <span>tiwchalet.vercel.app</span>
+            </div>
+          </div>
+
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" async/>
+        </div>
+      )}
+
       {/* TOP BAR */}
       {screen!=='exam'&&(
         <div style={{background:'#fff',borderBottom:`1px solid ${C.border}`,padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100}}>
-          <div style={{display:'flex',alignItems:'center',gap:9,cursor:mode==='parent'?'pointer':'default'}} onClick={()=>mode==='parent'&&setEditingProfile(true)}>
+          <div style={{display:'flex',alignItems:'center',gap:9,cursor:mode==='parent'?'pointer':'default'}} onClick={()=>{if(mode==='parent'){setEditName(cfg?.childName||'');setEditAvatar(cfg?.childAvatarUrl||'');setShowProfileModal(true);setScreen('settings')}}}>
             {childAvatar
               ?<img src={childAvatar} alt="" style={{width:36,height:36,borderRadius:10,objectFit:'cover',border:`2px solid ${mode==='parent'?C.green:C.border}`}}/>
               :<div style={{width:36,height:36,borderRadius:10,background:mode==='parent'?C.greenL:C.blueL,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{mode==='parent'?'👩':'🧒'}</div>
@@ -631,6 +879,18 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* Restore + Report quick buttons */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                  <button onClick={()=>setShowRestoreModal(true)}
+                    style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'10px 8px',borderRadius:11,border:`1px solid ${C.border}`,background:'#fff',color:C.blue,cursor:'pointer',fontFamily:'inherit',fontSize:fs-1,fontWeight:500}}>
+                    <span>♻️</span>Restore ข้อมูล
+                  </button>
+                  <button onClick={()=>setShowReportModal(true)} disabled={!history.length}
+                    style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'10px 8px',borderRadius:11,border:`1px solid ${C.border}`,background:'#fff',color:history.length?C.blue:C.muted,cursor:history.length?'pointer':'default',fontFamily:'inherit',fontSize:fs-1,fontWeight:500}}>
+                    <span>📄</span>รายงาน
+                  </button>
+                </div>
+
                 {/* LINE OA button */}
                 <a href={lineOAUrl} target="_blank" rel="noopener noreferrer"
                   style={{display:'flex',alignItems:'center',gap:10,padding:'13px 16px',borderRadius:14,background:'#06c755',color:'#fff',textDecoration:'none',marginBottom:12,cursor:'pointer'}}>
@@ -777,12 +1037,22 @@ export default function Home() {
           {questions.map(q=>{
             const opts=q.opts||[q.opt_a||'',q.opt_b||'',q.opt_c||'',q.opt_d||'']
             return (<div key={q.id} style={{background:'#fff',borderRadius:14,padding:'14px',marginBottom:10,border:`2px solid ${answers[q.id]!==undefined?C.navy:C.border}`,transition:'border-color .15s'}}>
-              <div style={{display:'flex',gap:8,marginBottom:11}}>
+              <div style={{display:'flex',gap:8,marginBottom:8}}>
                 <div style={{width:24,height:24,borderRadius:7,background:answers[q.id]!==undefined?C.navy:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:answers[q.id]!==undefined?'#fff':C.muted,flexShrink:0}}>{q.id.toString().slice(-2)}</div>
                 <div style={{fontSize:fs,fontWeight:500,color:C.text,lineHeight:1.6}}>{q.text}</div>
               </div>
+              {q.image_url&&<img src={q.image_url} alt="โจทย์" style={{width:'100%',maxHeight:200,objectFit:'contain',borderRadius:9,border:`1px solid ${C.border}`,marginBottom:9}}/>}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7}}>
-                {opts.map((opt,oi)=>{const sel=answers[q.id]===oi;return <button key={oi} onClick={()=>setAnswers(p=>({...p,[q.id]:oi}))} style={{padding:'10px 12px',borderRadius:10,border:`2px solid ${sel?C.navy:C.border}`,background:sel?C.navy:'#fafafa',color:sel?'#fff':C.text,fontSize:fs-1,cursor:'pointer',fontFamily:'inherit',textAlign:'left',fontWeight:sel?600:400,transition:'all .12s'}}>{opt}</button>})}
+                {opts.map((opt,oi)=>{
+                  const sel=answers[q.id]===oi
+                  const imgs=[q.opt_a_img,q.opt_b_img,q.opt_c_img,q.opt_d_img]
+                  const oi_img=imgs[oi]
+                  return <button key={oi} onClick={()=>setAnswers(p=>({...p,[q.id]:oi}))}
+                    style={{padding:'10px 12px',borderRadius:10,border:`2px solid ${sel?C.navy:C.border}`,background:sel?C.navy:'#fafafa',color:sel?'#fff':C.text,fontSize:fs-1,cursor:'pointer',fontFamily:'inherit',textAlign:'left',fontWeight:sel?600:400,transition:'all .12s'}}>
+                    {oi_img&&<img src={oi_img} alt={opt} style={{width:'100%',maxHeight:80,objectFit:'contain',borderRadius:6,marginBottom:4,display:'block'}}/>}
+                    {opt}
+                  </button>
+                })}
               </div>
             </div>)
           })}
@@ -810,11 +1080,26 @@ export default function Home() {
             const ua=answers[q.id]; const ok=ua===q.ans
             const opts=q.opts||[q.opt_a||'',q.opt_b||'',q.opt_c||'',q.opt_d||'']
             return (<div key={q.id} style={{background:'#fff',borderRadius:13,padding:'13px 14px',marginBottom:9,border:`2px solid ${ok?'#bbf7d0':'#fecaca'}`}}>
-              <div style={{display:'flex',gap:7,marginBottom:8}}><div style={{width:22,height:22,borderRadius:6,background:ok?C.greenL:C.redL,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0}}>{ok?'✓':'✗'}</div><div style={{fontSize:fs,fontWeight:500,color:C.text,lineHeight:1.55}}>{q.text}</div></div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:q.explain?9:0}}>
-                {opts.map((opt,oi)=>{const isAns=oi===q.ans;const isUser=oi===ua;return <div key={oi} style={{padding:'7px 9px',borderRadius:8,border:`1.5px solid ${isAns?C.green:isUser&&!ok?C.red:C.border}`,background:isAns?C.greenL:isUser&&!ok?C.redL:'#fafafa',fontSize:fs-2,color:isAns?C.greenD:isUser&&!ok?'#991b1b':C.muted,fontWeight:isAns?600:400}}>{opt}{isAns?' ✓':''}{isUser&&!ok?' ✗':''}</div>})}
+              <div style={{display:'flex',gap:7,marginBottom:6}}>
+                <div style={{width:22,height:22,borderRadius:6,background:ok?C.greenL:C.redL,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0}}>{ok?'✓':'✗'}</div>
+                <div style={{fontSize:fs,fontWeight:500,color:C.text,lineHeight:1.55}}>{q.text}</div>
               </div>
-              {q.explain&&<div style={{background:'#f9fafb',borderRadius:8,padding:'8px 10px',fontSize:fs-2,color:C.text,lineHeight:1.6}}>💡 {q.explain}</div>}
+              {q.image_url&&<img src={q.image_url} alt="โจทย์" style={{width:'100%',maxHeight:180,objectFit:'contain',borderRadius:8,border:`1px solid ${C.border}`,marginBottom:8}}/>}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:q.explain||q.explain_img?9:0}}>
+                {opts.map((opt,oi)=>{
+                  const isAns=oi===q.ans;const isUser=oi===ua
+                  const imgs=[q.opt_a_img,q.opt_b_img,q.opt_c_img,q.opt_d_img]
+                  const oi_img=imgs[oi]
+                  return <div key={oi} style={{padding:'7px 9px',borderRadius:8,border:`1.5px solid ${isAns?C.green:isUser&&!ok?C.red:C.border}`,background:isAns?C.greenL:isUser&&!ok?C.redL:'#fafafa',fontSize:fs-2,color:isAns?C.greenD:isUser&&!ok?'#991b1b':C.muted,fontWeight:isAns?600:400}}>
+                    {oi_img&&<img src={oi_img} alt={opt} style={{width:'100%',maxHeight:70,objectFit:'contain',borderRadius:5,marginBottom:4,display:'block'}}/>}
+                    {opt}{isAns?' ✓':''}{isUser&&!ok?' ✗':''}
+                  </div>
+                })}
+              </div>
+              {(q.explain||q.explain_img)&&<div style={{background:'#f9fafb',borderRadius:8,padding:'8px 10px',fontSize:fs-2,color:C.text,lineHeight:1.6}}>
+                💡 {q.explain}
+                {q.explain_img&&<img src={q.explain_img} alt="เฉลย" style={{width:'100%',maxHeight:150,objectFit:'contain',borderRadius:7,marginTop:6,border:`1px solid ${C.border}`}}/>}
+              </div>}
             </div>)
           })}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,marginTop:14}}>
@@ -944,6 +1229,30 @@ export default function Home() {
             </div>
             <span style={{marginLeft:'auto',fontSize:16}}>→</span>
           </a>
+
+          {/* Restore ข้อมูล */}
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px',marginBottom:12}}>
+            <div style={{fontSize:fs,fontWeight:700,color:C.text,marginBottom:4}}>Restore ข้อมูล</div>
+            <div style={{fontSize:Math.max(11,fs-3),color:C.muted,marginBottom:10}}>ดึงประวัติผลสอบกลับมาจาก CustomerID เก่า</div>
+            <div style={{background:'#f8fafc',borderRadius:9,padding:'7px 10px',marginBottom:8,fontSize:Math.max(10,fs-4),color:C.muted}}>
+              CustomerID: <span style={{fontFamily:'monospace',fontWeight:600,color:C.text}}>{customerId}</span>
+            </div>
+            <button onClick={()=>setShowRestoreModal(true)}
+              style={{width:'100%',padding:'10px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.blue,fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+              ♻️ Restore จาก CustomerID เก่า
+            </button>
+          </div>
+
+          {/* รายงาน */}
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px',marginBottom:12}}>
+            <div style={{fontSize:fs,fontWeight:700,color:C.text,marginBottom:4}}>📊 รายงานผลการเรียน</div>
+            <div style={{fontSize:Math.max(11,fs-3),color:C.muted,marginBottom:10}}>สร้างรายงาน A4 · บันทึกเป็น JPG เพื่อแชร์</div>
+            <button onClick={()=>setShowReportModal(true)} disabled={!history.length}
+              style={{width:'100%',padding:'10px',borderRadius:10,border:'none',background:history.length?C.blue:'#d1d5db',color:'#fff',fontSize:fs-1,fontWeight:600,cursor:history.length?'pointer':'default',fontFamily:'inherit'}}>
+              📄 ดู / บันทึกรายงาน A4
+            </button>
+            {!history.length&&<div style={{fontSize:10,color:C.muted,textAlign:'center',marginTop:4}}>ต้องทำข้อสอบก่อนถึงจะสร้างรายงานได้</div>}
+          </div>
 
           {/* Backup */}
           <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px'}}>
