@@ -1,23 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// ── Middleware v1.0 — ป้องกัน /admin ด้วย Secret Path ──
-// Admin URL จริงคือ /admin-[ADMIN_SECRET] เช่น /admin-tc2024
-// ถ้าเข้า /admin ตรงๆ → redirect ไป 404
+// ── Middleware — ป้องกัน Admin URL ──────────────────────────────
+// Admin URL จริงคือ /admin-[ADMIN_SECRET]
+// ถ้าเข้า /admin หรือ secret ผิด → 404
+// [adminPath] dynamic route จะ catch ทุก /xxx
+// middleware เช็คว่า secret ถูกก่อน render
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'tc2024'
+const ADMIN_SECRET    = process.env.ADMIN_SECRET || 'tc2024'
 const ADMIN_REAL_PATH = `/admin-${ADMIN_SECRET}`
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // ถ้าเข้า /admin ตรงๆ (ไม่มี secret) → 404
+  // /admin ตรงๆ → 404 เสมอ
   if (pathname === '/admin' || pathname === '/admin/') {
     return NextResponse.rewrite(new URL('/not-found', req.url))
   }
 
-  // ถ้าเข้า /admin-WRONG_SECRET → 404
-  if (pathname.startsWith('/admin-') && pathname !== ADMIN_REAL_PATH) {
-    return NextResponse.rewrite(new URL('/not-found', req.url))
+  // /admin-xxx → ตรวจ secret
+  if (pathname.startsWith('/admin-')) {
+    if (pathname !== ADMIN_REAL_PATH) {
+      return NextResponse.rewrite(new URL('/not-found', req.url))
+    }
+    // secret ถูก → rewrite ไป [adminPath] route
+    return NextResponse.rewrite(new URL('/[adminPath]', req.url))
   }
 
   return NextResponse.next()
