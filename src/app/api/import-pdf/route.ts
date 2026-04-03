@@ -99,7 +99,7 @@ function parseAll(fullText: string, school: string, defaultSubj: string, year: s
 // ── API ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const adminPin = req.headers.get('x-admin-pin') || ''
-  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
+  if (!adminPin || !/^\d{4,6}$/.test(adminPin)) {
     return NextResponse.json({ ok:false, error:'Unauthorized' }, { status:401 })
   }
   const sb = getServiceClient()

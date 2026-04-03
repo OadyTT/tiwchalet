@@ -5,7 +5,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { requestId, action, adminPin } = body
 
-  if (!adminPin || !/^\d{4}$/.test(adminPin)) {
+  if (!adminPin || !/^\d{4,6}$/.test(adminPin)) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -73,7 +73,7 @@ function PinModal({pinFor, onSuccess, onCancel}:{
 
   const isParent = pinFor==='parent'
   const title    = isParent ? '🔒 โหมดผู้ปกครอง' : '⭐ ปลดล็อก Full Version'
-  const hint     = isParent ? 'ใส่รหัส 4 หลัก' : 'ใส่รหัส 5 ตัว (ตัวอักษร+ตัวเลข)'
+  const hint     = isParent ? 'ใส่รหัส 4 หลัก' : 'ใส่รหัส 6 หลักตัวเลข'
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:700,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -83,23 +83,31 @@ function PinModal({pinFor, onSuccess, onCancel}:{
         <div style={{fontSize:13,color:err?C.red:C.muted,marginBottom:16,minHeight:18}}>{err||hint}</div>
 
         {!isParent ? (
-          // Full version — keyboard input
-          <div style={{marginBottom:14}}>
-            <input value={pin}
-              onChange={e=>{ setPin(e.target.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)); setErr('') }}
-              onKeyDown={e=>{ if(e.key==='Enter'&&pin.length===5) doVerify(pin) }}
-              placeholder="เช่น aB3k9" autoFocus
-              style={{width:'100%',padding:'12px 14px',borderRadius:12,border:`2px solid ${err?C.red:'#e2e8f0'}`,
-                background:'#fafafa',fontSize:22,fontWeight:700,textAlign:'center',letterSpacing:8,
-                fontFamily:'monospace',outline:'none',color:C.text,display:'block'}}/>
-            <div style={{fontSize:11,color:C.muted,marginTop:6}}>Case-sensitive: ตัวใหญ่-เล็กต่างกัน</div>
-            <button onClick={()=>doVerify(pin)} disabled={pin.length!==5||busy}
-              style={{width:'100%',marginTop:12,padding:'12px',borderRadius:10,border:'none',
-                background:pin.length===5&&!busy?C.gold:'#d1d5db',color:'#fff',
-                fontSize:14,fontWeight:700,cursor:pin.length===5&&!busy?'pointer':'default',fontFamily:'inherit'}}>
-              {busy?'กำลังตรวจสอบ...':'ปลดล็อก ⭐'}
-            </button>
-          </div>
+          // Full version — numpad 6 หลักตัวเลข
+          <>
+            <div style={{display:'flex',justifyContent:'center',gap:10,marginBottom:20}}>
+              {[0,1,2,3,4,5].map(i=>(
+                <div key={i} style={{width:12,height:12,borderRadius:'50%',
+                  background:i<pin.length?C.gold:'#e2e8f0',transition:'background .12s'}}/>
+              ))}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
+              {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d,i)=>(
+                d===''?<div key={i}/>:
+                <button key={i} onClick={()=>{
+                  if(busy) return
+                  const next = d==='⌫' ? pin.slice(0,-1) : pin+d
+                  if(next.length>6) return
+                  setPin(next); setErr('')
+                  if(next.length===6) doVerify(next)
+                }} disabled={busy}
+                  style={{height:52,borderRadius:12,border:'1px solid #e2e8f0',background:'#fafafa',
+                    fontSize:d==='⌫'?16:19,fontWeight:500,cursor:'pointer',fontFamily:'inherit',color:C.text}}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </>
         ) : (
           // Parent — numpad
           <>

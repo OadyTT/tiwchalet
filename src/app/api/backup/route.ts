@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const envCron    = process.env.CRON_SECRET || 'tiwchalet-cron'
 
   // auth: PIN 4 หลักตัวเลข หรือ cron secret
-  const isValidPin  = /^\d{4}$/.test(adminPin)
+  const isValidPin  = /^\d{4,6}$/.test(adminPin)
   const isValidCron = cronSecret === envCron
 
   if (!isValidPin && !isValidCron) {

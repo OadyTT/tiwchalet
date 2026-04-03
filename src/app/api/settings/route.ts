@@ -30,7 +30,7 @@ export async function GET() {
 // GET with admin auth: ส่งข้อมูลเต็ม รวม PIN (สำหรับ admin page)
 export async function PUT(req: NextRequest) {
   const authHeader = req.headers.get('x-admin-pin') || ''
-  if (!authHeader || !/^[A-Za-z0-9]{4,5}$/.test(authHeader)) {
+  if (!authHeader || !/^\d{4,6}$/.test(authHeader)) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
     if (body[k] !== undefined) {
       // Validate PIN fields
       if ((k === 'parent_pin' || k === 'full_version_pin') &&
-          (typeof body[k] !== 'string' || !/^[A-Za-z0-9]{4,5}$/.test(body[k]))) {
+          (typeof body[k] !== 'string' || !/^\d{4,6}$/.test(body[k]))) {
         return NextResponse.json(
-          { ok: false, error: `${k} ต้องเป็น 4-5 ตัว (ตัวเลข/ตัวอักษร)` }, { status: 400 }
+          { ok: false, error: `${k} ต้องเป็น 4-6 หลักตัวเลข` }, { status: 400 }
         )
       }
       updates[k] = body[k]
