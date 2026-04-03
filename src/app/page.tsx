@@ -54,7 +54,7 @@ function PinModal({pinFor,onSuccess,onCancel}:{pinFor:PinFor;onSuccess:(t:string
       const res=await fetch('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({pin:p,type:pinFor,clientId:cid.current})})
       const data=await res.json()
-      if(data.ok){onSuccess(data.token,data)}
+      if(data.ok){onSuccess(data.token,{...data,_rawPin:p})}
       else{setShake(true);setErr(data.error||'PIN ไม่ถูกต้อง');setPin('');setTimeout(()=>setShake(false),400)}
     }catch{setErr('เชื่อมต่อไม่ได้');setPin('')}
     finally{setBusy(false)}
@@ -290,11 +290,12 @@ export default function Home() {
   const openPinFor=(pf:PinFor)=>{setPinFor(pf);setShowPin(true)}
   const unlockParent=(_tok:string,data?:any)=>{
     setMode('parent');setShowPin(false)
-    if(data?.token) setParentPin(data.token)
+    // เก็บ PIN จริง (4 หลัก) ไว้ส่ง x-admin-pin header — ไม่ใช่ token UUID
+    if(data?._rawPin) setParentPin(data._rawPin)
     if(data?.settings){const s=data.settings;setCfg(p=>p?{...p,childName:s.childName||p.childName,childAvatarUrl:s.childAvatarUrl||p.childAvatarUrl,childTargetSchool:s.childTargetSchool||p.childTargetSchool,qrCodeImageUrl:s.qrCodeImageUrl||p.qrCodeImageUrl,adminPhone:s.adminPhone||p.adminPhone,adminEmail:s.adminEmail||p.adminEmail,adminLineId:s.adminLineId||p.adminLineId,fullVersionPrice:s.fullVersionPrice||p.fullVersionPrice}:null);setEditName(s.childName||'');setEditAvatar(s.childAvatarUrl||'')}
     // load backup log
-    if(data?.token){
-      fetch('/api/backup',{headers:{'x-admin-pin':data.token}}).then(r=>r.json()).then(d=>{if(d.log)setBackupLog(d.log)}).catch(()=>{})
+    if(data?._rawPin){
+      fetch('/api/backup',{headers:{'x-admin-pin':data._rawPin}}).then(r=>r.json()).then(d=>{if(d.log)setBackupLog(d.log)}).catch(()=>{})
     }
   }
   const lockParent=()=>{setMode('student');setParentPin('')}
