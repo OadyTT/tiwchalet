@@ -41,6 +41,14 @@ const persist = {
   load: ()=>{ try{const d=localStorage.getItem('tc-v2');return d?JSON.parse(d):{}}catch{return{}} },
   save: (d:any)=>{ try{localStorage.setItem('tc-v2',JSON.stringify(d))}catch{} }
 }
+// CustomerID — สร้างครั้งเดียวต่อ device ไม่เปลี่ยน
+function getCustomerId(): string {
+  try {
+    let id = localStorage.getItem('tc-cid')
+    if (!id) { id = 'CUS-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2,6).toUpperCase(); localStorage.setItem('tc-cid', id) }
+    return id
+  } catch { return 'CUS-UNKNOWN' }
+}
 
 // ─── PIN MODAL ──────────────────────────────────────────────────
 function PinModal({pinFor,onSuccess,onCancel}:{pinFor:PinFor;onSuccess:(t:string,d?:any)=>void;onCancel:()=>void}) {
@@ -229,6 +237,8 @@ export default function Home() {
   const isFull=plan==='full'&&daysLeft>0
 
   // exam
+  const [showCancelConfirm,setShowCancelConfirm]=useState(false)
+  const [customerId,setCustomerId]=useState('CUS-LOADING')
   const [selSchool,setSelSchool]=useState('')
   const [selSubject,setSelSubject]=useState<Subject>('คณิตศาสตร์')
   const [selYear,setSelYear]=useState('2566')
@@ -266,6 +276,7 @@ export default function Home() {
     if(d.pin) setParentPin(d.pin)
     if(d.fontSize) setFontSize(d.fontSize)
     if(d.activeSchools) setActiveSchools(d.activeSchools)
+    setCustomerId(getCustomerId())
     fetch('/api/settings').then(r=>r.json()).then(d=>{
       if(d.settings){const s=d.settings;setCfg({childName:s.child_name,childAvatarUrl:s.child_avatar_url,childTargetSchool:s.child_target_school,qrCodeImageUrl:s.qr_code_image_url,adminPhone:s.admin_phone,adminEmail:s.admin_email,adminLineId:s.admin_line_id,fullVersionPrice:s.full_version_price,fullVersionDays:s.full_version_days||30});setEditName(s.child_name||'');setEditAvatar(s.child_avatar_url||'')}
     }).catch(()=>{})
@@ -340,6 +351,13 @@ export default function Home() {
     finally{setLoading(false)}
   }
 
+  const cancelExam=()=>{
+    setTimerOn(false); setShowCancelConfirm(false)
+    setQuestions([]); setAnswers({}); setTimeLeft(0)
+    setExamCount(c=>Math.max(0,c-1)) // คืน count กลับ
+    setScreen('pick')
+  }
+
   const doSubmit=useCallback(()=>{
     if(!questions.length||!selSchool||!selSubject) return
     setTimerOn(false)
@@ -347,7 +365,7 @@ export default function Home() {
     const tu=questions.length*90-timeLeft
     const r:ExamResult={id:Date.now().toString(),school:selSchool,subject:selSubject,year:selYear,score:sc,total:questions.length,pct:Math.round(sc/questions.length*100),timeUsed:tu,plan,createdAt:nowStr()}
     setHistory(p=>[r,...p].slice(0,50));setScreen('result')
-    fetch('/api/save-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({school:selSchool,subject:selSubject,year:selYear,score:sc,total:questions.length,timeUsed:tu,plan})}).catch(()=>{})
+    fetch('/api/save-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({school:selSchool,subject:selSubject,year:selYear,score:sc,total:questions.length,timeUsed:tu,plan,customerId})}).catch(()=>{})
   },[questions,selSchool,selSubject,selYear,answers,timeLeft,plan])
 
   // ← Backup — ใช้ parentPin (4 หลัก) ตรงๆ
@@ -729,10 +747,29 @@ export default function Home() {
         </div>)}
 
         {/* EXAM */}
+        {/* Cancel confirm modal */}
+        {showCancelConfirm&&(
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:700,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+            <div style={{background:'#fff',borderRadius:18,padding:'28px 22px',width:'100%',maxWidth:300,textAlign:'center'}}>
+              <div style={{fontSize:36,marginBottom:10}}>⚠️</div>
+              <div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:8}}>หยุดทำข้อสอบ?</div>
+              <div style={{fontSize:13,color:C.muted,marginBottom:20}}>ความคืบหน้าจะหายไป ยืนยันหยุดหรือไม่?</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <button onClick={()=>setShowCancelConfirm(false)} style={{padding:'11px',borderRadius:11,border:`1.5px solid ${C.border}`,background:'transparent',color:C.text,fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>ทำต่อ</button>
+                <button onClick={cancelExam} style={{padding:'11px',borderRadius:11,border:'none',background:C.red,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>หยุดเลย</button>
+              </div>
+            </div>
+          </div>
+        )}
         {screen==='exam'&&questions.length>0&&(<div className="fu">
-          <div style={{background:'#fff',borderRadius:14,padding:'12px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',border:`1px solid ${C.border}`}}>
-            <div><div style={{fontSize:fs,fontWeight:700,color:C.text}}>{selSchool} · {SUBJ_ICON[selSubject]} {selSubject}</div><div style={{fontSize:Math.max(11,fs-3),color:C.muted}}>ตอบแล้ว {Object.keys(answers).length}/{questions.length} ข้อ</div></div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:fs+6,fontWeight:700,color:timeLeft<60?C.red:C.green,fontVariantNumeric:'tabular-nums'}}>{fmtSec(timeLeft)}</div><div style={{fontSize:10,color:C.muted}}>เหลือเวลา</div></div>
+          <div style={{background:'#fff',borderRadius:14,padding:'12px 14px',marginBottom:12,border:`1px solid ${C.border}`}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+              <div><div style={{fontSize:fs,fontWeight:700,color:C.text}}>{selSchool} · {SUBJ_ICON[selSubject]} {selSubject}</div><div style={{fontSize:Math.max(11,fs-3),color:C.muted}}>ตอบแล้ว {Object.keys(answers).length}/{questions.length} ข้อ</div></div>
+              <div style={{textAlign:'right'}}><div style={{fontSize:fs+6,fontWeight:700,color:timeLeft<60?C.red:C.green,fontVariantNumeric:'tabular-nums'}}>{fmtSec(timeLeft)}</div><div style={{fontSize:10,color:C.muted}}>เหลือเวลา</div></div>
+            </div>
+            <button onClick={()=>setShowCancelConfirm(true)} style={{width:'100%',padding:'7px',borderRadius:8,border:`1px solid #fca5a5`,background:'#fff',color:C.red,fontSize:Math.max(11,fs-3),cursor:'pointer',fontFamily:'inherit',fontWeight:500}}>
+              ✕ ยกเลิก / หยุดทำข้อสอบ
+            </button>
           </div>
           <div style={{height:4,background:'#f1f5f9',borderRadius:2,marginBottom:14,overflow:'hidden'}}>
             <div style={{height:'100%',width:`${Object.keys(answers).length/questions.length*100}%`,background:C.navy,transition:'width .3s'}}/>
@@ -849,9 +886,22 @@ export default function Home() {
                   <input value={editName} onChange={e=>setEditName(e.target.value)} style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:fs,color:C.text,outline:'none',fontFamily:'inherit'}}/>
                 </div>
                 <div style={{marginBottom:14}}>
-                  <label style={{fontSize:Math.max(11,fs-3),fontWeight:600,color:C.muted,display:'block',marginBottom:5}}>URL รูปโปรไฟล์</label>
-                  <input value={editAvatar} onChange={e=>setEditAvatar(e.target.value)} placeholder="https://..." style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:fs,color:C.text,outline:'none',fontFamily:'inherit'}}/>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted,marginTop:4}}>วาง URL รูปจาก Google Photos, Cloudinary, หรือ URL รูปจากอินเทอร์เน็ต</div>
+                  <label style={{fontSize:Math.max(11,fs-3),fontWeight:600,color:C.muted,display:'block',marginBottom:5}}>รูปโปรไฟล์นักเรียน</label>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                    <button onClick={()=>{const inp=document.getElementById('avatarFile') as HTMLInputElement;inp?.click()}}
+                      style={{padding:'10px 8px',borderRadius:10,border:`2px dashed #cbd5e1`,background:'#fafafa',cursor:'pointer',fontFamily:'inherit',fontSize:Math.max(11,fs-3),color:C.muted,fontWeight:500}}>
+                      📷 เลือกไฟล์ JPG<br/><span style={{fontSize:10,opacity:.7}}>ไม่เกิน 1 MB</span>
+                    </button>
+                    <input value={editAvatar.startsWith('data:')?'':editAvatar} onChange={e=>setEditAvatar(e.target.value)} placeholder="หรือวาง URL รูป" style={{padding:'10px 8px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:Math.max(11,fs-3),color:C.text,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <input id="avatarFile" type="file" accept="image/jpeg,image/jpg,image/png,image/webp" style={{display:'none'}} onChange={e=>{
+                    const file=e.target.files?.[0]; if(!file) return
+                    if(file.size>1024*1024){alert('ไฟล์ใหญ่เกิน 1 MB กรุณาลดขนาดก่อน');return}
+                    const reader=new FileReader()
+                    reader.onload=ev=>setEditAvatar(ev.target?.result as string)
+                    reader.readAsDataURL(file)
+                  }}/>
+                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>รองรับ JPG/PNG/WebP ขนาดไม่เกิน 1 MB</div>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <button onClick={()=>setEditingProfile(false)} style={{padding:'10px',borderRadius:10,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:fs-1,cursor:'pointer',fontFamily:'inherit'}}>ยกเลิก</button>

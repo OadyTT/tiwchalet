@@ -1,30 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServiceClient } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  const body = await req.json().catch(() => ({}))
+  const { school, subject, year, score, total, timeUsed, plan, customerId } = body
 
-  // Save to Supabase
-  try {
-    const { getServiceClient } = await import('@/lib/supabase')
-    const sb = getServiceClient()
-    await sb.from('exam_results').insert({
-      school: body.school, subject: body.subject, year: body.year,
-      score: body.score, total: body.total,
-      pct: Math.round(body.score / body.total * 100),
-      time_used: body.timeUsed, plan: body.plan || 'trial',
-    })
-  } catch (_) {}
+  if (!school || !subject || score === undefined || !total) {
+    return NextResponse.json({ ok: false, error: 'ข้อมูลไม่ครบ' }, { status: 400 })
+  }
 
-  // Sync to Google Sheets via GAS (fire-and-forget)
-  const gasUrl = process.env.GAS_ENDPOINT
-  if (gasUrl) {
-    try {
-      await fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'saveResult', ...body }),
-      })
-    } catch (_) {}
+  const sb = getServiceClient()
+  const { error } = await sb.from('exam_results').insert({
+    school, subject, year: year || '2566',
+    score, total,
+    pct:         Math.round((score / total) * 100),
+    time_used:   timeUsed || 0,
+    plan:        plan || 'trial',
+    customer_id: customerId || '',   // ← เพิ่ม CustomerID
+  })
+
+  if (error) {
+    console.error('save-result error:', error)
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

@@ -21,10 +21,22 @@ interface PdfQuestion {
   opts?:string[]; hasAns?:boolean; _idx?:number
 }
 type Tab = 'settings'|'approve'|'questions'|'pdf'|'stats'
+type ListType = 'schools'|'subjects'|'years'
 
-const SCHOOLS  = ['สวนกุหลาบ','สามเสน','สาธิตจุฬา','สาธิตประสานมิตร','บดินทรเดชา','หอวัง']
-const SUBJECTS = ['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English']
-const YEARS    = ['2564','2565','2566','2567','2568']
+const DEFAULT_SCHOOLS  = ['สวนกุหลาบ','สามเสน','สาธิตจุฬา','สาธิตประสานมิตร','บดินทรเดชา','หอวัง']
+const DEFAULT_SUBJECTS = ['คณิตศาสตร์','วิทยาศาสตร์','ภาษาไทย','English']
+const DEFAULT_YEARS    = ['2564','2565','2566','2567','2568']
+
+// load custom lists from localStorage
+function loadCustomLists() {
+  try {
+    const d = localStorage.getItem('tc-admin-lists')
+    return d ? JSON.parse(d) : {}
+  } catch { return {} }
+}
+function saveCustomLists(d: any) {
+  try { localStorage.setItem('tc-admin-lists', JSON.stringify(d)) } catch {}
+}
 const OPTS     = ['ก','ข','ค','ง']
 const C = { green:'#16a34a',greenL:'#dcfce7',greenD:'#14532d',navy:'#1e293b',gold:'#d97706',goldL:'#fef3c7',red:'#dc2626',redL:'#fee2e2',blue:'#1d4ed8',blueL:'#eff6ff',border:'#e2e8f0',muted:'#64748b',text:'#0f172a' }
 
@@ -74,6 +86,16 @@ export default function AdminPage() {
   const [pdfMsg,setPdfMsg]=useState('')
   const [pdfErr,setPdfErr]=useState('')
   const [pdfFileId,setPdfFileId]=useState('')
+  // custom lists
+  const [customSchools,setCustomSchools]=useState<string[]>([])
+  const [customSubjects,setCustomSubjects]=useState<string[]>([])
+  const [customYears,setCustomYears]=useState<string[]>([])
+  const [showAddList,setShowAddList]=useState<ListType|null>(null)
+  const [newListItem,setNewListItem]=useState('')
+
+  const allSchools  = [...DEFAULT_SCHOOLS, ...customSchools]
+  const allSubjects = [...DEFAULT_SUBJECTS, ...customSubjects]
+  const allYears    = [...DEFAULT_YEARS, ...customYears]
   const [pdfQs,setPdfQs]=useState<PdfQuestion[]>([])
   const [editIdx,setEditIdx]=useState<number|null>(null)
   const pdfRef=useRef<HTMLInputElement>(null)
@@ -84,6 +106,32 @@ export default function AdminPage() {
   // backup
   const [backing,setBacking]=useState(false)
   const [backMsg,setBackMsg]=useState('')
+
+  useEffect(()=>{
+    const d = loadCustomLists()
+    if(d.schools)  setCustomSchools(d.schools)
+    if(d.subjects) setCustomSubjects(d.subjects)
+    if(d.years)    setCustomYears(d.years)
+  },[])
+
+  const addListItem = (type: ListType) => {
+    const v = newListItem.trim()
+    if(!v) return
+    let updated: string[] = []
+    if(type==='schools')  { updated=[...customSchools,v];  setCustomSchools(updated);  saveCustomLists({schools:updated,subjects:customSubjects,years:customYears}) }
+    if(type==='subjects') { updated=[...customSubjects,v]; setCustomSubjects(updated); saveCustomLists({schools:customSchools,subjects:updated,years:customYears}) }
+    if(type==='years')    { updated=[...customYears,v];    setCustomYears(updated);    saveCustomLists({schools:customSchools,subjects:customSubjects,years:updated}) }
+    setNewListItem(''); setShowAddList(null)
+  }
+
+  const removeListItem = (type: ListType, item: string) => {
+    if(DEFAULT_SCHOOLS.includes(item)||DEFAULT_SUBJECTS.includes(item)||DEFAULT_YEARS.includes(item)){
+      alert('ไม่สามารถลบรายการ default ได้'); return
+    }
+    if(type==='schools')  { const u=customSchools.filter(s=>s!==item);  setCustomSchools(u);  saveCustomLists({schools:u,subjects:customSubjects,years:customYears}) }
+    if(type==='subjects') { const u=customSubjects.filter(s=>s!==item); setCustomSubjects(u); saveCustomLists({schools:customSchools,subjects:u,years:customYears}) }
+    if(type==='years')    { const u=customYears.filter(s=>s!==item);    setCustomYears(u);    saveCustomLists({schools:customSchools,subjects:customSubjects,years:u}) }
+  }
 
   const loadAll = async (p:string) => {
     // settings (full with PINs)
@@ -241,6 +289,39 @@ ${data.rawText||''}`)
   const upd=(k:keyof Settings,v:any)=>setSettings(p=>p?{...p,[k]:v}:p)
 
   // ── login screen ──
+  // ── Add list item modal ──
+  const AddListModal = showAddList ? (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:700,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#fff',borderRadius:16,padding:'24px 20px',width:'100%',maxWidth:340}}>
+        <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:14}}>
+          {showAddList==='schools'?'+ เพิ่มโรงเรียน':showAddList==='subjects'?'+ เพิ่มวิชา':'+ เพิ่มปีการศึกษา'}
+        </div>
+        <input value={newListItem} onChange={e=>setNewListItem(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&addListItem(showAddList!)}
+          placeholder={showAddList==='schools'?'เช่น เตรียมอุดม':showAddList==='subjects'?'เช่น สังคมศึกษา':'เช่น 2568'}
+          autoFocus
+          style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:14,fontFamily:'inherit',marginBottom:14,outline:'none'}}/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <button onClick={()=>{setShowAddList(null);setNewListItem('')}} style={{padding:'10px',borderRadius:9,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',fontFamily:'inherit',fontSize:13}}>ยกเลิก</button>
+          <button onClick={()=>addListItem(showAddList!)} disabled={!newListItem.trim()} style={{padding:'10px',borderRadius:9,border:'none',background:newListItem.trim()?C.navy:'#d1d5db',color:'#fff',cursor:newListItem.trim()?'pointer':'default',fontFamily:'inherit',fontSize:13,fontWeight:600}}>เพิ่ม</button>
+        </div>
+        {/* แสดง current list */}
+        <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>รายการทั้งหมด:</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {(showAddList==='schools'?allSchools:showAddList==='subjects'?allSubjects:allYears).map(item=>(
+              <span key={item} onClick={()=>removeListItem(showAddList!,item)}
+                style={{fontSize:11,padding:'3px 9px',borderRadius:20,background:DEFAULT_SCHOOLS.includes(item)||DEFAULT_SUBJECTS.includes(item)||DEFAULT_YEARS.includes(item)?'#f1f5f9':C.redL,color:DEFAULT_SCHOOLS.includes(item)||DEFAULT_SUBJECTS.includes(item)||DEFAULT_YEARS.includes(item)?C.muted:C.red,cursor:'pointer',border:`1px solid ${DEFAULT_SCHOOLS.includes(item)||DEFAULT_SUBJECTS.includes(item)||DEFAULT_YEARS.includes(item)?C.border:'#fca5a5'}`}}>
+                {item} {!(DEFAULT_SCHOOLS.includes(item)||DEFAULT_SUBJECTS.includes(item)||DEFAULT_YEARS.includes(item))&&'×'}
+              </span>
+            ))}
+          </div>
+          <div style={{fontSize:10,color:C.muted,marginTop:6}}>คลิกที่รายการที่เพิ่มเองเพื่อลบ (default ลบไม่ได้)</div>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   if(!authed) return (
     <div style={{minHeight:'100dvh',display:'flex',alignItems:'center',justifyContent:'center',background:'#f8fafc',fontFamily:"'Sarabun',sans-serif",padding:16}}>
       <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet"/>
@@ -274,6 +355,7 @@ ${data.rawText||''}`)
         </div>
       )}
 
+      {AddListModal}
       {/* topbar */}
       <div style={{background:C.navy,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -362,7 +444,7 @@ ${data.rawText||''}`)
               </F>
               <F label="โรงเรียนเป้าหมาย">
                 <select value={settings.child_target_school} onChange={e=>upd('child_target_school',e.target.value)} {...IS}>
-                  {SCHOOLS.map(s=><option key={s}>{s}</option>)}
+                  {allSchools.map(s=><option key={s}>{s}</option>)}
                 </select>
               </F>
             </Sec>
@@ -423,10 +505,15 @@ ${data.rawText||''}`)
             <input ref={pdfRef} type="file" accept=".pdf" style={{display:'none'}} onChange={onPdfFile}/>
 
             <Sec title="ข้อมูลไฟล์" icon="📋">
+              <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
+                <button onClick={()=>setShowAddList('schools')} style={{fontSize:11,padding:'3px 8px',borderRadius:7,border:`1px dashed ${C.border}`,background:'transparent',color:C.blue,cursor:'pointer',fontFamily:'inherit'}}>+ โรงเรียน</button>
+                <button onClick={()=>setShowAddList('subjects')} style={{fontSize:11,padding:'3px 8px',borderRadius:7,border:`1px dashed ${C.border}`,background:'transparent',color:C.blue,cursor:'pointer',fontFamily:'inherit'}}>+ วิชา</button>
+                <button onClick={()=>setShowAddList('years')} style={{fontSize:11,padding:'3px 8px',borderRadius:7,border:`1px dashed ${C.border}`,background:'transparent',color:C.blue,cursor:'pointer',fontFamily:'inherit'}}>+ ปี</button>
+              </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-                <F label="โรงเรียน"><select value={pdfMeta.school} onChange={e=>setPdfMeta(p=>({...p,school:e.target.value}))} {...IS}>{SCHOOLS.map(s=><option key={s}>{s}</option>)}</select></F>
-                <F label="วิชา"><select value={pdfMeta.subject} onChange={e=>setPdfMeta(p=>({...p,subject:e.target.value}))} {...IS}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></F>
-                <F label="ปี"><select value={pdfMeta.year} onChange={e=>setPdfMeta(p=>({...p,year:e.target.value}))} {...IS}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></F>
+                <F label="โรงเรียน"><select value={pdfMeta.school} onChange={e=>setPdfMeta(p=>({...p,school:e.target.value}))} {...IS}>{allSchools.map(s=><option key={s}>{s}</option>)}</select></F>
+                <F label="วิชา"><select value={pdfMeta.subject} onChange={e=>setPdfMeta(p=>({...p,subject:e.target.value}))} {...IS}>{allSubjects.map(s=><option key={s}>{s}</option>)}</select></F>
+                <F label="ปี"><select value={pdfMeta.year} onChange={e=>setPdfMeta(p=>({...p,year:e.target.value}))} {...IS}>{allYears.map(y=><option key={y}>{y}</option>)}</select></F>
               </div>
             </Sec>
 
@@ -570,10 +657,15 @@ ${data.rawText||''}`)
         {tab==='questions'&&(
           <div>
             <Sec title="เพิ่มข้อสอบ" icon="➕">
+              <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
+                <button onClick={()=>setShowAddList('schools')} style={{fontSize:11,padding:'4px 9px',borderRadius:7,border:`1px dashed ${C.border}`,background:'transparent',color:C.blue,cursor:'pointer',fontFamily:'inherit'}}>+ โรงเรียน</button>
+                <button onClick={()=>setShowAddList('subjects')} style={{fontSize:11,padding:'4px 9px',borderRadius:7,border:`1px dashed ${C.border}`,background:'transparent',color:C.blue,cursor:'pointer',fontFamily:'inherit'}}>+ วิชา</button>
+                <button onClick={()=>setShowAddList('years')} style={{fontSize:11,padding:'4px 9px',borderRadius:7,border:`1px dashed ${C.border}`,background:'transparent',color:C.blue,cursor:'pointer',fontFamily:'inherit'}}>+ ปี</button>
+              </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-                <F label="โรงเรียน"><select value={newQ.school} onChange={e=>setNewQ(p=>({...p,school:e.target.value}))} {...IS}>{SCHOOLS.map(s=><option key={s}>{s}</option>)}</select></F>
-                <F label="ปี"><select value={newQ.year} onChange={e=>setNewQ(p=>({...p,year:e.target.value}))} {...IS}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></F>
-                <F label="วิชา"><select value={newQ.subject} onChange={e=>setNewQ(p=>({...p,subject:e.target.value}))} {...IS}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></F>
+                <F label="โรงเรียน"><select value={newQ.school} onChange={e=>setNewQ(p=>({...p,school:e.target.value}))} {...IS}>{allSchools.map(s=><option key={s}>{s}</option>)}</select></F>
+                <F label="ปี"><select value={newQ.year} onChange={e=>setNewQ(p=>({...p,year:e.target.value}))} {...IS}>{allYears.map(y=><option key={y}>{y}</option>)}</select></F>
+                <F label="วิชา"><select value={newQ.subject} onChange={e=>setNewQ(p=>({...p,subject:e.target.value}))} {...IS}>{allSubjects.map(s=><option key={s}>{s}</option>)}</select></F>
                 <F label="ระดับ"><select value={newQ.level} onChange={e=>setNewQ(p=>({...p,level:e.target.value}))} {...IS}>{['ง่าย','ปานกลาง','ยาก','ยากมาก'].map(l=><option key={l}>{l}</option>)}</select></F>
               </div>
               <F label="โจทย์ *"><textarea value={newQ.text} onChange={e=>setNewQ(p=>({...p,text:e.target.value}))} rows={2} placeholder="พิมพ์โจทย์..." {...IS as any}/></F>
