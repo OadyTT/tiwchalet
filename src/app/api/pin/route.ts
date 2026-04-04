@@ -1,93 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
 
-// Rate limiting
+// Rate limiting in-memory — reset ทุก Vercel cold start
+// เพียงพอสำหรับ small app (Vercel serverless 1 instance ต่อ region)
 const attempts: Record<string, { count: number; resetAt: number }> = {}
-const ipBlock:   Record<string, number> = {}
 
-function checkRate(clientId: string, ip: string): string | null {
-  const now = Date.now()
-  if (ipBlock[ip] && ipBlock[ip] > now)
-    return `IP ถูก block อีก ${Math.ceil((ipBlock[ip]-now)/60000)} นาที`
-  const key = `${clientId}:${ip}`
-  if (!attempts[key] || attempts[key].resetAt < now)
-    attempts[key] = { count: 0, resetAt: now + 5 * 60 * 1000 }
-  attempts[key].count++
-  if (attempts[key].count > 5) {
-    ipBlock[ip] = now + 60 * 60 * 1000
-    return 'ลองผิดเกินกำหนด IP ถูก block 1 ชั่วโมง'
-  }
-  return null
-}
-function clearRate(clientId: string, ip: string) {
-  delete attempts[`${clientId}:${ip}`]
+// IP-based block list (ถ้าใส่ผิดเกิน 10 ครั้ง block 1 ชั่วโมง)
+const blocked: Record<string, number> = {}
+
+function getIP(req: NextRequest): string {
+  return (
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip') ||
+    'unknown'
+  )
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}))
-  const { pin, type, clientId = 'unknown' } = body
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+  const ip = getIP(req)
+  const now = Date.now()
 
-  // ── type กำหนด PIN ที่ต้องใช้ ──────────────────────────
-  // parent → parent_pin (4 หลัก) — เข้าโหมดผู้ปกครองในแอป
-  // admin  → admin_pin  (6 หลัก) — เข้า admin page
-  // full   → full_version_pin (6 หลัก) — ปลดล็อก Full Version
-  const validTypes: Record<string, { pattern: RegExp; hint: string; field: string }> = {
-    parent: { pattern: /^\d{4}$/, hint: '4 หลักตัวเลข',  field: 'parent_pin' },
-    admin:  { pattern: /^\d{6}$/, hint: '6 หลักตัวเลข',  field: 'admin_pin'  },
-    full:   { pattern: /^\d{6}$/, hint: '6 หลักตัวเลข',  field: 'full_version_pin' },
+  // Check IP block
+  if (blocked[ip] && now < blocked[ip]) {
+    const minsLeft = Math.ceil((blocked[ip] - now) / 60000)
+    return NextResponse.json(
+      { ok: false, error: `ถูกบล็อก ${minsLeft} นาที เนื่องจากใส่รหัสผิดบ่อยเกินไป` },
+      { status: 429 }
+    )
   }
 
-  const typeConfig = validTypes[type]
-  if (!typeConfig) {
+  const body = await req.json().catch(() => ({}))
+  const { pin, type, clientId } = body
+
+  // parent_pin: 5 หลักตัวเลข | full_version_pin: 6 หลักตัวเลข
+  const isParentPin = type === 'parent'
+  const pinPattern  = isParentPin ? /^\d{5}$/ : /^\d{6}$/
+  const pinHint     = isParentPin ? '5 หลักตัวเลข' : '6 หลักตัวเลข'
+
+  if (!pin || typeof pin !== 'string' || !pinPattern.test(pin)) {
+    return NextResponse.json({ ok: false, error: `PIN ต้องเป็น ${pinHint}` }, { status: 400 })
+  }
+  if (!type || !['parent', 'full'].includes(type)) {
     return NextResponse.json({ ok: false, error: 'type ไม่ถูกต้อง' }, { status: 400 })
   }
 
-  if (!pin || !typeConfig.pattern.test(pin)) {
-    return NextResponse.json({
-      ok: false,
-      error: `PIN ต้องเป็น ${typeConfig.hint}`
-    }, { status: 400 })
+  // Rate limit ต่อ clientId+type: 5 ครั้ง / 5 นาที
+  const key = `${ip}_${clientId || 'x'}_${type}`
+  if (!attempts[key] || now > attempts[key].resetAt) {
+    attempts[key] = { count: 0, resetAt: now + 5 * 60 * 1000 }
   }
-
-  const rateErr = checkRate(clientId, ip)
-  if (rateErr) return NextResponse.json({ ok: false, error: rateErr }, { status: 429 })
+  if (attempts[key].count >= 5) {
+    // Block IP 1 ชั่วโมงถ้าผิดเกิน 10 ครั้ง
+    const totalFails = attempts[key].count
+    if (totalFails >= 10) blocked[ip] = now + 60 * 60 * 1000
+    return NextResponse.json(
+      { ok: false, error: 'ลองใหม่อีก 5 นาที (ใส่รหัสผิดบ่อยเกินไป)' },
+      { status: 429 }
+    )
+  }
 
   const sb = getServiceClient()
   const { data: settings, error } = await sb
-    .from('settings')
-    .select('parent_pin, admin_pin, full_version_pin, full_version_days, child_name, child_avatar_url, child_target_school, full_version_price, parent_name')
-    .eq('id', 1)
-    .single()
+    .from('settings').select('*').eq('id', 1).single()
 
   if (error || !settings) {
-    return NextResponse.json({ ok: false, error: 'ไม่สามารถตรวจสอบได้' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'Server error — ตรวจสอบ Supabase' }, { status: 500 })
   }
 
-  const correctPin = settings[typeConfig.field as keyof typeof settings] as string
+  const correctPin = type === 'parent' ? settings.parent_pin : settings.full_version_pin
+
   if (pin !== correctPin) {
-    const left = Math.max(0, 5 - (attempts[`${clientId}:${ip}`]?.count || 0))
-    return NextResponse.json({ ok: false, error: `PIN ไม่ถูกต้อง (เหลือ ${left} ครั้ง)` }, { status: 401 })
+    attempts[key].count++
+    const remaining = 5 - attempts[key].count
+    return NextResponse.json(
+      { ok: false, error: `PIN ไม่ถูกต้อง (เหลือ ${remaining} ครั้ง)` },
+      { status: 401 }
+    )
   }
 
-  clearRate(clientId, ip)
+  // Success — reset attempts
+  delete attempts[key]
+  delete blocked[ip]
 
-  // ส่งข้อมูลกลับตาม type
-  const token = `${type}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  const extra: Record<string, any> = { token, _rawPin: pin }
+  const token = crypto.randomUUID()
+  const expiresAt = new Date(now + 30 * 60 * 1000).toISOString()
 
-  if (type === 'parent') {
-    extra.settings = {
-      childName:        settings.child_name,
-      childAvatarUrl:   settings.child_avatar_url,
-      childTargetSchool:settings.child_target_school,
-      fullVersionPrice: settings.full_version_price,
-      parentName:       settings.parent_name,
-    }
-  }
-  if (type === 'full') {
-    extra.fullVersionDays = settings.full_version_days || 45
-  }
-
-  return NextResponse.json({ ok: true, ...extra })
+  return NextResponse.json({
+    ok: true, token, expiresAt, type,
+    fullVersionDays: settings.full_version_days,
+    settings: type === 'parent' ? {
+      childName:         settings.child_name,
+      childAvatarUrl:    settings.child_avatar_url,
+      childTargetSchool: settings.child_target_school,
+      qrCodeImageUrl:    settings.qr_code_image_url,
+      adminPhone:        settings.admin_phone,
+      adminEmail:        settings.admin_email,
+      adminLineId:       settings.admin_line_id,
+      fullVersionPrice:  settings.full_version_price,
+    } : null,
+  })
 }
