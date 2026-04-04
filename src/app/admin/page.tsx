@@ -165,6 +165,9 @@ export default function AdminPage() {
   const allYears    = [...DEFAULT_YEARS, ...customYears]
   const [pdfQs,setPdfQs]=useState<PdfQuestion[]>([])
   const [editIdx,setEditIdx]=useState<number|null>(null)
+  const [editingQ,setEditingQ]=useState<any|null>(null)   // ข้อสอบที่กำลังแก้
+  const [savingQ,setSavingQ]=useState(false)
+  const [qFilter,setQFilter]=useState('')                  // filter ค้นหา
   const pdfRef=useRef<HTMLInputElement>(null)
   const [pastedImages,setPastedImages]=useState<string[]>([])  // รูปที่ paste มา
   const [addingPasted,setAddingPasted]=useState(false)
@@ -200,6 +203,27 @@ export default function AdminPage() {
     if(type==='schools')  { const u=customSchools.filter(s=>s!==item);  setCustomSchools(u);  saveCustomLists({schools:u,subjects:customSubjects,years:customYears}) }
     if(type==='subjects') { const u=customSubjects.filter(s=>s!==item); setCustomSubjects(u); saveCustomLists({schools:customSchools,subjects:u,years:customYears}) }
     if(type==='years')    { const u=customYears.filter(s=>s!==item);    setCustomYears(u);    saveCustomLists({schools:customSchools,subjects:customSubjects,years:u}) }
+  }
+
+  const saveEditQ = async (q: any) => {
+    setSavingQ(true)
+    try {
+      await fetch(`/api/questions?id=${q.id}`,{method:'DELETE',headers:{'x-admin-pin':pin}})
+      const res = await fetch('/api/questions',{method:'POST',
+        headers:{'Content-Type':'application/json','x-admin-pin':pin},
+        body:JSON.stringify({
+          school:q.school,year:q.year,subject:q.subject,level:q.level||'ปานกลาง',
+          text:q.text,opt_a:q.opt_a||'',opt_b:q.opt_b||'',opt_c:q.opt_c||'',opt_d:q.opt_d||'',
+          ans:q.ans||0,explain:q.explain||'',source:q.source||'admin',
+          image_url:q.image_url||'',opt_a_img:q.opt_a_img||'',opt_b_img:q.opt_b_img||'',
+          opt_c_img:q.opt_c_img||'',opt_d_img:q.opt_d_img||'',explain_img:q.explain_img||'',
+        })})
+      const data = await res.json()
+      if(!data.ok) throw new Error(data.error)
+      setEditingQ(null)
+      await loadAll(pin)
+    } catch(e:any){ alert('บันทึกไม่สำเร็จ: '+e.message) }
+    finally { setSavingQ(false) }
   }
 
   const loadAll = async (p:string) => {
@@ -967,17 +991,103 @@ export default function AdminPage() {
             </Sec>
 
             <Sec title={`ข้อสอบทั้งหมด (${questions.length} ข้อ)`} icon="📋">
-              {questions.slice(0,15).map((q,i)=>(
-                <div key={i} style={{padding:'9px 10px',borderRadius:9,border:`1px solid ${C.border}`,marginBottom:6,background:'#fafafa'}}>
-                  <div style={{display:'flex',gap:6,marginBottom:4,flexWrap:'wrap'}}>
-                    <span style={{fontSize:11,padding:'2px 7px',borderRadius:5,background:C.blueL,color:C.blue,fontWeight:500}}>{q.subject}</span>
-                    <span style={{fontSize:11,padding:'2px 7px',borderRadius:5,background:'#f1f5f9',color:C.muted}}>{q.school} · {q.year}</span>
-                    {q.source?.startsWith('pdf')&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:5,background:C.goldL,color:'#92400e'}}>PDF</span>}
-                  </div>
-                  <div style={{fontSize:13,color:C.text}}>{q.text?.slice(0,90)}{(q.text?.length||0)>90?'...':''}</div>
+              {/* search bar */}
+              <input value={qFilter} onChange={e=>setQFilter(e.target.value)}
+                placeholder="🔍 ค้นหาโจทย์, โรงเรียน, วิชา..."
+                style={{...IS.style,marginBottom:10,width:'100%',background:'#f8fafc'}}/>
+
+              {/* hint สำหรับข้อที่มีแค่รูป */}
+              {questions.some(q=>q.source==='paste-image')&&(
+                <div style={{background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:9,padding:'8px 12px',marginBottom:10,fontSize:12,color:'#78350f'}}>
+                  💡 ข้อที่ขึ้น "(รูปโจทย์)" ต้องกด <strong>✏️ แก้ไข</strong> เพื่อกรอกตัวเลือกและเฉลย
                 </div>
-              ))}
-              {questions.length>15&&<div style={{textAlign:'center',fontSize:12,color:C.muted,padding:'8px'}}>...และอีก {questions.length-15} ข้อใน Supabase</div>}
+              )}
+
+              {questions
+                .filter(q=>!qFilter||q.text?.includes(qFilter)||q.school?.includes(qFilter)||q.subject?.includes(qFilter))
+                .slice(0,20)
+                .map((q,i)=>{
+                const isEditing = editingQ?.id===q.id
+                const needsEdit = q.source==='paste-image'||!q.opt_a
+                return (
+                  <div key={q.id||i} style={{border:`1.5px solid ${isEditing?C.navy:needsEdit?'#fcd34d':C.border}`,borderRadius:12,marginBottom:8,background:'#fff',overflow:'hidden'}}>
+                    {/* header row */}
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:isEditing?C.blueL:needsEdit?'#fffbeb':'#fff'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:4}}>
+                          <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:C.blueL,color:C.blue,fontWeight:600}}>{q.subject}</span>
+                          <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:'#f1f5f9',color:C.muted}}>{q.school} · {q.year}</span>
+                          {needsEdit&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:'#fef3c7',color:'#92400e',fontWeight:600}}>⚠️ ยังไม่สมบูรณ์</span>}
+                          {q.image_url&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:'#f0fdf4',color:C.green}}>🖼️ มีรูป</span>}
+                        </div>
+                        <div style={{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {q.text?.slice(0,60)}{(q.text?.length||0)>60?'...':''}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',gap:5,flexShrink:0}}>
+                        <button onClick={()=>setEditingQ(isEditing?null:{...q})}
+                          style={{fontSize:11,padding:'4px 9px',borderRadius:7,border:`1px solid ${isEditing?C.navy:C.border}`,background:isEditing?C.navy:'transparent',color:isEditing?'#fff':C.muted,cursor:'pointer',fontFamily:'inherit',fontWeight:isEditing?600:400}}>
+                          {isEditing?'▲ ปิด':'✏️ แก้ไข'}
+                        </button>
+                        <button onClick={async()=>{if(!confirm('ลบข้อนี้?'))return;await fetch(`/api/questions?id=${q.id}`,{method:'DELETE',headers:{'x-admin-pin':pin}});await loadAll(pin)}}
+                          style={{fontSize:11,padding:'4px 7px',borderRadius:7,border:`1px solid #fca5a5`,background:'transparent',color:C.red,cursor:'pointer',fontFamily:'inherit'}}>🗑️</button>
+                      </div>
+                    </div>
+
+                    {/* preview รูป (ถ้ามี) ตอนปิด */}
+                    {!isEditing&&q.image_url&&(
+                      <img src={q.image_url} alt="โจทย์" style={{width:'100%',maxHeight:120,objectFit:'contain',background:'#f8fafc',borderTop:`1px solid ${C.border}`}}/>
+                    )}
+
+                    {/* inline editor */}
+                    {isEditing&&editingQ&&(
+                      <div style={{padding:'12px',borderTop:`1px solid ${C.border}`,background:'#fafafa'}}>
+                        {/* โจทย์ */}
+                        <F label="โจทย์ *">
+                          <textarea value={editingQ.text||''} rows={2}
+                            onChange={e=>setEditingQ((p:any)=>({...p,text:e.target.value}))}
+                            style={{...IS.style,resize:'vertical'} as any}/>
+                        </F>
+                        {/* รูปโจทย์ */}
+                        {editingQ.image_url&&(
+                          <div style={{marginBottom:8}}>
+                            <div style={{fontSize:11,color:C.muted,marginBottom:4}}>รูปโจทย์</div>
+                            <div style={{position:'relative',display:'inline-block',width:'100%'}}>
+                              <img src={editingQ.image_url} alt="โจทย์" style={{width:'100%',maxHeight:150,objectFit:'contain',borderRadius:8,border:`1px solid ${C.border}`}}/>
+                              <button onClick={()=>setEditingQ((p:any)=>({...p,image_url:''}))}
+                                style={{position:'absolute',top:4,right:4,width:22,height:22,borderRadius:11,border:'none',background:'rgba(0,0,0,.6)',color:'#fff',fontSize:12,cursor:'pointer',padding:0}}>✕</button>
+                            </div>
+                          </div>
+                        )}
+                        {/* ตัวเลือก 4 ช่อง */}
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                          {(['opt_a','opt_b','opt_c','opt_d'] as const).map((k,i)=>(
+                            <F key={k} label={`ตัวเลือก ${'กขคง'[i]}${editingQ.ans===i?' ✓ (เฉลย)':''}`}>
+                              <input value={editingQ[k]||''}
+                                onChange={e=>setEditingQ((p:any)=>({...p,[k]:e.target.value}))}
+                                onFocus={()=>setEditingQ((p:any)=>({...p,ans:i}))}
+                                style={{...IS.style,borderColor:editingQ.ans===i?C.green:undefined,background:editingQ.ans===i?C.greenL:undefined}}/>
+                            </F>
+                          ))}
+                        </div>
+                        <F label="คำอธิบายเฉลย">
+                          <input value={editingQ.explain||''} onChange={e=>setEditingQ((p:any)=>({...p,explain:e.target.value}))} {...IS}/>
+                        </F>
+                        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>💡 คลิกที่ช่องตัวเลือกเพื่อเซ็ตเป็นเฉลย</div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                          <button onClick={()=>setEditingQ(null)}
+                            style={{padding:'9px',borderRadius:9,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,cursor:'pointer',fontFamily:'inherit',fontSize:13}}>ยกเลิก</button>
+                          <button onClick={()=>saveEditQ(editingQ)} disabled={savingQ}
+                            style={{padding:'9px',borderRadius:9,border:'none',background:savingQ?'#94a3b8':C.green,color:'#fff',cursor:savingQ?'default':'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600}}>
+                            {savingQ?<><span className="spin">⟳</span> กำลังบันทึก</>:'💾 บันทึก'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {questions.length>20&&!qFilter&&<div style={{textAlign:'center',fontSize:12,color:C.muted,padding:'8px'}}>...แสดง 20 ล่าสุด จาก {questions.length} ข้อ</div>}
             </Sec>
           </div>
         )}
