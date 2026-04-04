@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
-  const adminPin   = req.headers.get('x-admin-pin') || ''
-  const cronSecret = req.headers.get('x-cron-secret') || ''
-  const envCron    = process.env.CRON_SECRET || 'tiwchalet-cron'
+  const adminPin    = req.headers.get('x-admin-pin') || ''
+  const cronSecret  = req.headers.get('x-cron-secret') || ''
+  const clientToken = req.headers.get('x-client-backup') || ''  // ← ผู้ปกครองใช้อันนี้ ไม่ต้อง PIN
+  const envCron     = process.env.CRON_SECRET || 'tiwchalet-cron'
 
-  const isValidPin  = /^\d{4,6}$/.test(adminPin)
-  const isValidCron = cronSecret === envCron
+  const isValidPin    = /^\d{4,6}$/.test(adminPin)
+  const isValidCron   = cronSecret === envCron
+  const isValidClient = clientToken === 'tiwchalet-parent'  // ← token คงที่ ไม่ sensitive
 
-  if (!isValidPin && !isValidCron) {
+  if (!isValidPin && !isValidCron && !isValidClient) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 
+  // PIN → ตรวจสอบกับ DB
   if (isValidPin) {
     const sb2 = getServiceClient()
     const { data: cfg } = await sb2.from('settings').select('parent_pin').eq('id', 1).single()

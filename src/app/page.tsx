@@ -428,13 +428,19 @@ export default function Home() {
   }
 
   const doBackup = async () => {
-    // backup ขึ้น Google Sheets ผ่าน GAS
-    if(!parentPin){alert('กรุณาเข้าโหมดผู้ปกครองก่อน');return}
+    // backup ขึ้น Google Sheets ผ่าน GAS — ไม่ต้องการ PIN
     setBackupBusy(true); setBackupType('sheet'); setBackupMsg('กำลัง backup ไป Google Sheets...')
     try{
+      // ใช้ x-client-backup token แทน PIN — ผู้ปกครองกดได้เลย
+      const headers: Record<string,string> = {
+        'Content-Type': 'application/json',
+        'x-client-backup': 'tiwchalet-parent',
+      }
+      // ถ้ามี PIN ก็ส่งด้วย (จะได้ข้อมูลครบกว่า)
+      if(parentPin) headers['x-admin-pin'] = parentPin
       const res=await fetch('/api/backup',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-admin-pin':parentPin},
+        headers,
         body:JSON.stringify({})
       })
       const data=await res.json()
@@ -935,7 +941,7 @@ export default function Home() {
                   {[
                     {icon:'📱',label:'1. Backup เครื่อง',fn:doBackupLocal,c:'#1d4ed8'},
                     {icon:'☁️',label:'2. Sync Supabase',fn:doBackupCloud,c:'#0891b2'},
-                    {icon:'📊',label:'3. Google Sheets',fn:doBackup,c:C.green},
+                    {icon:'📊',label:'3. Sheets (ไม่ต้อง PIN)',fn:doBackup,c:C.green},
                     {icon:'♻️',label:'4. Restore',fn:()=>setShowRestoreModal(true),c:C.blue},
                     {icon:'📄',label:'5. รายงาน A4',fn:()=>setShowReportModal(true),c:'#7c3aed',disabled:!history.length},
                     {icon:'⚙️',label:'6. ตั้งค่า',fn:()=>setScreen('settings'),c:C.muted},
@@ -1362,7 +1368,8 @@ export default function Home() {
               📊 Sheets ล่าสุด: {new Date(backupLog.last_backup).toLocaleString('th-TH')} · {backupLog.rows_results} ผลสอบ {backupLog.gas_ok?'✅':'⚠️'}
             </div>}
             <div style={{background:'#fffbeb',borderRadius:9,padding:'7px 10px',fontSize:Math.max(10,fs-4),color:'#92400e'}}>
-              💡 แนะนำ: กด <strong>2. Sync ขึ้น Supabase</strong> ก่อนเปลี่ยนมือถือ เพื่อให้ Restore ได้
+              💡 แนะนำ: กด <strong>2. Sync ขึ้น Supabase</strong> ก่อนเปลี่ยนมือถือ เพื่อให้ Restore ได้<br/>
+              <span style={{opacity:.8}}>Google Sheets backup อัตโนมัติทุกอาทิตย์ หรือกดปุ่ม 3 เพื่อ backup ทันที</span>
             </div>
             {backupMsg&&<div style={{fontSize:Math.max(11,fs-3),color:backupMsg.startsWith('✅')?C.green:backupMsg.startsWith('⚠️')?C.gold:C.red,marginTop:8,textAlign:'center',fontWeight:500}}>{backupMsg}</div>}
           </div>
