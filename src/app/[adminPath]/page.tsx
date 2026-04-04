@@ -6,10 +6,11 @@
 import { useState, useEffect, useRef } from 'react'
 
 interface Settings {
-  parent_pin:string; full_version_pin:string; full_version_days:number
+  parent_pin:string; admin_pin:string; full_version_pin:string; full_version_days:number
   full_version_price:string; full_version_enabled:boolean
   qr_code_image_url:string; child_name:string; child_avatar_url:string
   child_target_school:string; admin_phone:string; admin_email:string; admin_line_id:string
+  parent_name:string
 }
 interface UpgradeReq {
   id:string; name:string; contact:string; note:string
@@ -576,10 +577,10 @@ export default function AdminPage() {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <F label="PIN ผู้ปกครอง">
-                  <input value={(settings as any).admin_pin || ""} onChange={e=>upd('admin_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,6))} maxLength={6} type="password" placeholder="6 หลักตัวเลข" {...IS}/>
+                  <input value={settings.admin_pin||''} onChange={e=>upd('admin_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,6))} maxLength={6} type="password" placeholder="6 หลักตัวเลข" {...IS}/>
                 </F>
                 <F label="Parent PIN (4 หลักตัวเลข) — ผู้ปกครองใช้ในแอป">
-                  <input value={(settings as any).parent_pin||''} onChange={e=>upd('parent_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,4))} maxLength={4} type="password" placeholder="4 หลักตัวเลข" {...IS}/>
+                  <input value={settings.parent_pin||''} onChange={e=>upd('parent_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,4))} maxLength={4} type="password" placeholder="4 หลักตัวเลข" {...IS}/>
                   <div style={{fontSize:11,color:'#64748b',marginTop:2}}>ผู้ปกครองกด 4 หลักเพื่อเข้าโหมดผู้ปกครองในแอป</div>
                 </F>
                 <F label="Admin PIN (6 หลักตัวเลข) — สำหรับ admin page นี้">
