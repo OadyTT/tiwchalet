@@ -259,6 +259,10 @@ export default function Home() {
   const [backupBusy,setBackupBusy]=useState(false)
   const [backupMsg,setBackupMsg]=useState('')
   const [backupType,setBackupType]=useState<'local'|'cloud'|'sheet'|null>(null)
+  const [lastLocal,setLastLocal]=useState<string|null>(null)
+  const [lastCloud,setLastCloud]=useState<string|null>(null)
+  const [lastSheet,setLastSheet]=useState<string|null>(null)
+  const [lastRestore,setLastRestore]=useState<string|null>(null)
   const [editingProfile,setEditingProfile]=useState(false)
   const [editParentName,setEditParentName]=useState('คุณแม่')
   const [showProfileModal,setShowProfileModal]=useState(false)  // modal overlay
@@ -400,6 +404,8 @@ export default function Home() {
     a.download = `tiwchalet-backup-${customerId}-${new Date().toLocaleDateString('th-TH').replace(/\//g,'-')}.json`
     a.click()
     URL.revokeObjectURL(url)
+    const ts = new Date().toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+    setLastLocal(ts)
     setBackupMsg('✅ บันทึกไฟล์ backup ลงเครื่องแล้ว')
     setTimeout(()=>setBackupMsg(''),5000)
   }
@@ -422,6 +428,8 @@ export default function Home() {
       }catch{ fail++ }
     }
     setBackupBusy(false); setBackupType(null)
+    const ts = new Date().toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+    if(fail===0) setLastCloud(ts)
     setBackupMsg(fail===0
       ? `✅ Sync ${ok} ผลสอบขึ้น Supabase แล้ว (ใช้ Restore ได้)`
       : `⚠️ Sync ${ok} สำเร็จ / ${fail} ล้มเหลว`)
@@ -446,6 +454,8 @@ export default function Home() {
       })
       const data=await res.json()
       if(data.ok){
+        const ts = new Date().toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+        setLastSheet(ts)
         setBackupMsg('✅ '+data.message)
         const lr=await fetch('/api/backup',{headers:{'x-admin-pin':parentPin}})
         const ld=await lr.json()
@@ -638,7 +648,12 @@ export default function Home() {
                 style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:14,fontFamily:'monospace',color:C.text,outline:'none'}}/>
               <div style={{fontSize:10,color:C.muted,marginTop:4}}>CustomerID อยู่ใน Settings → ข้อมูลนักเรียน</div>
             </div>
-            {restoreMsg&&<div style={{fontSize:13,padding:'8px 10px',borderRadius:9,background:restoreMsg.startsWith('✅')?C.greenL:C.redL,color:restoreMsg.startsWith('✅')?C.greenD:C.red,marginBottom:10,lineHeight:1.5}}>{restoreMsg}</div>}
+            {restoreMsg&&(
+              <div style={{padding:'10px 12px',borderRadius:10,background:restoreMsg.startsWith('✅')?C.greenL:C.redL,marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:600,color:restoreMsg.startsWith('✅')?C.greenD:C.red,marginBottom:2}}>{restoreMsg}</div>
+                {lastRestore&&<div style={{fontSize:11,color:C.green}}>เวลา: {lastRestore}</div>}
+              </div>
+            )}
             <button onClick={async()=>{
               if(!restoreId.trim()){setRestoreMsg('❌ กรุณาใส่ CustomerID');return}
               setRestoreBusy(true);setRestoreMsg('')
@@ -647,6 +662,8 @@ export default function Home() {
                 const data=await res.json()
                 if(data.ok){
                   setHistory(data.history||[])
+                  const ts = new Date().toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+                  setLastRestore(ts)
                   setRestoreMsg(`✅ ${data.message}`)
                   setTimeout(()=>setShowRestoreModal(false),2000)
                 }else{setRestoreMsg('❌ '+data.error)}
@@ -949,8 +966,8 @@ export default function Home() {
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
                   {[
                     {icon:'📱',label:'1. Backup เครื่อง',fn:doBackupLocal,c:'#1d4ed8'},
-                    {icon:'☁️',label:'2. Sync Supabase',fn:doBackupCloud,c:'#0891b2'},
-                    {icon:'📊',label:'3. Sheets (ไม่ต้อง PIN)',fn:doBackup,c:C.green},
+                    {icon:'☁️',label:lastCloud?`2. Synced ${lastCloud.slice(0,5)}`:'2. Sync Supabase',fn:doBackupCloud,c:'#0891b2'},
+                    {icon:'📊',label:lastSheet?`3. Sheets ${lastSheet.slice(0,5)}`:'3. Google Sheets',fn:doBackup,c:C.green},
                     {icon:'♻️',label:'4. Restore',fn:()=>setShowRestoreModal(true),c:C.blue},
                     {icon:'📄',label:'5. รายงาน A4',fn:()=>setShowReportModal(true),c:'#7c3aed',disabled:!history.length},
                     {icon:'⚙️',label:'6. ตั้งค่า',fn:()=>setScreen('settings'),c:C.muted},
@@ -1285,7 +1302,7 @@ export default function Home() {
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <button onClick={()=>openPinFor('full')} style={{padding:'9px',borderRadius:10,border:'none',background:C.navy,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🔑 มีรหัส</button>
-                  <button onClick={()=>setShowPayment(true)} style={{padding:'9px',borderRadius:10,border:'none',background:C.gold,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุน 100฿</button>
+                  <button onClick={()=>setShowPayment(true)} style={{padding:'9px',borderRadius:10,border:'none',background:C.gold,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>{`☕ สนับสนุน ${cfg?.fullVersionPrice||'100'}฿`}</button>
                 </div>
               </div>
             )}
@@ -1327,60 +1344,66 @@ export default function Home() {
           </div>
 
           {/* Backup */}
-          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px'}}>
-            <div style={{fontSize:fs,fontWeight:700,color:C.text,marginBottom:4}}>💾 Backup ข้อมูล</div>
-            <div style={{fontSize:Math.max(11,fs-3),color:C.muted,marginBottom:10}}>เลือกวิธี backup ที่ต้องการ</div>
+          <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'16px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+              <div style={{fontSize:fs,fontWeight:700,color:C.text}}>💾 Backup & Sync</div>
+              {backupMsg&&<div style={{fontSize:Math.max(10,fs-4),color:backupMsg.startsWith('✅')?C.green:backupMsg.startsWith('⚠️')?C.gold:C.red,fontWeight:600}}>{backupMsg.slice(0,2)}</div>}
+            </div>
 
-            {/* 3 ปุ่ม Backup */}
-            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}>
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:12}}>
 
-              {/* 1. บันทึกลงเครื่อง */}
+              {/* 1 บันทึกลงเครื่อง */}
               <button onClick={doBackupLocal} disabled={backupBusy}
-                style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderRadius:11,border:`1.5px solid ${C.border}`,background:'#f8fafc',cursor:'pointer',fontFamily:'inherit',textAlign:'left',width:'100%'}}>
-                <div style={{width:36,height:36,borderRadius:10,background:'#eff6ff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>📱</div>
-                <div style={{flex:1}}>
+                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:`1.5px solid ${lastLocal?'#86efac':C.border}`,background:lastLocal?'#f0fdf4':'#fff',cursor:backupBusy?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s'}}>
+                <div style={{width:40,height:40,borderRadius:11,background:'#dbeafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>📱</div>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>1. บันทึกลงเครื่อง</div>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ดาวน์โหลด JSON file ไว้กับตัว · ใช้ได้ offline</div>
+                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ดาวน์โหลด JSON · ใช้ offline ได้</div>
+                  {lastLocal&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ {lastLocal}</div>}
                 </div>
-                <span style={{fontSize:12,color:C.blue}}>↓</span>
+                <div style={{width:28,height:28,borderRadius:8,background:'#dbeafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:C.blue,flexShrink:0}}>↓</div>
               </button>
 
-              {/* 2. Sync ขึ้น Supabase */}
+              {/* 2 Sync Supabase */}
               <button onClick={doBackupCloud} disabled={backupBusy}
-                style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderRadius:11,border:`1.5px solid ${C.border}`,background:'#f8fafc',cursor:backupBusy?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',opacity:backupBusy&&backupType==='cloud'?.7:1}}>
-                <div style={{width:36,height:36,borderRadius:10,background:'#ecfeff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>
-                  {backupBusy&&backupType==='cloud'?<span className="spin">⟳</span>:'☁️'}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:`1.5px solid ${lastCloud?'#86efac':C.border}`,background:lastCloud?'#f0fdf4':'#fff',cursor:backupBusy&&backupType!=='cloud'?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s',opacity:backupBusy&&backupType==='cloud'?.75:1}}>
+                <div style={{width:40,height:40,borderRadius:11,background:'#cffafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>
+                  {backupBusy&&backupType==='cloud'?<span className="spin" style={{fontSize:18}}>⟳</span>:'☁️'}
                 </div>
-                <div style={{flex:1}}>
+                <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>2. Sync ขึ้น Supabase</div>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>บันทึกขึ้น database · ใช้ Restore ข้ามเครื่องได้</div>
+                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>บันทึก database · Restore ข้ามเครื่องได้</div>
+                  {lastCloud&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ {lastCloud}</div>}
                 </div>
-                <span style={{fontSize:12,color:'#0891b2'}}>↑</span>
+                <div style={{width:28,height:28,borderRadius:8,background:'#cffafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:'#0891b2',flexShrink:0}}>↑</div>
               </button>
 
-              {/* 3. Backup ไป Google Sheets */}
+              {/* 3 Google Sheets */}
               <button onClick={doBackup} disabled={backupBusy}
-                style={{display:'flex',alignItems:'center',gap:10,padding:'11px 14px',borderRadius:11,border:`1.5px solid ${C.border}`,background:'#f8fafc',cursor:backupBusy?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',opacity:backupBusy&&backupType==='sheet'?.7:1}}>
-                <div style={{width:36,height:36,borderRadius:10,background:'#f0fdf4',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>
-                  {backupBusy&&backupType==='sheet'?<span className="spin">⟳</span>:'📊'}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:`1.5px solid ${lastSheet?'#86efac':C.border}`,background:lastSheet?'#f0fdf4':'#fff',cursor:backupBusy&&backupType!=='sheet'?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s',opacity:backupBusy&&backupType==='sheet'?.75:1}}>
+                <div style={{width:40,height:40,borderRadius:11,background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>
+                  {backupBusy&&backupType==='sheet'?<span className="spin" style={{fontSize:18}}>⟳</span>:'📊'}
                 </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>3. Backup ไป Google Sheets</div>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ส่งข้อมูลทั้งหมดไป Sheets · ดูสถิติได้ง่าย</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>3. Google Sheets</div>
+                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ส่งข้อมูลทั้งหมด · ดูสถิติ Excel ได้</div>
+                  {lastSheet&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ {lastSheet}</div>}
                 </div>
-                <span style={{fontSize:12,color:C.green}}>↑</span>
+                <div style={{width:28,height:28,borderRadius:8,background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:C.green,flexShrink:0}}>↑</div>
               </button>
             </div>
 
-            {/* Last backup info */}
-            {backupLog&&<div style={{background:'#f8fafc',borderRadius:9,padding:'7px 10px',marginBottom:6,fontSize:Math.max(10,fs-4),color:C.muted}}>
-              📊 Sheets ล่าสุด: {new Date(backupLog.last_backup).toLocaleString('th-TH')} · {backupLog.rows_results} ผลสอบ {backupLog.gas_ok?'✅':'⚠️'}
-            </div>}
-            <div style={{background:'#fffbeb',borderRadius:9,padding:'7px 10px',fontSize:Math.max(10,fs-4),color:'#92400e'}}>
-              💡 แนะนำ: กด <strong>2. Sync ขึ้น Supabase</strong> ก่อนเปลี่ยนมือถือ เพื่อให้ Restore ได้<br/>
-              <span style={{opacity:.8}}>Google Sheets backup อัตโนมัติทุกอาทิตย์ หรือกดปุ่ม 3 เพื่อ backup ทันที</span>
+            {backupMsg&&(
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:10,background:backupMsg.startsWith('✅')?C.greenL:backupMsg.startsWith('⚠️')?'#fef3c7':C.redL,marginBottom:8}}>
+                <span style={{fontSize:15}}>{backupMsg.startsWith('✅')?'✅':backupMsg.startsWith('⚠️')?'⚠️':'❌'}</span>
+                <span style={{fontSize:Math.max(11,fs-3),color:backupMsg.startsWith('✅')?C.greenD:backupMsg.startsWith('⚠️')?'#78350f':'#991b1b',fontWeight:500}}>{backupMsg.replace(/^[✅⚠️❌]\s*/,'')}</span>
+              </div>
+            )}
+
+            <div style={{background:'#fffbeb',borderRadius:9,padding:'8px 11px',fontSize:Math.max(10,fs-4),color:'#92400e',display:'flex',gap:6,alignItems:'flex-start'}}>
+              <span style={{flexShrink:0}}>💡</span>
+              <span>กด <strong>2. Sync Supabase</strong> ก่อนเปลี่ยนเครื่อง · Sheets backup อัตโนมัติทุกอาทิตย์</span>
             </div>
-            {backupMsg&&<div style={{fontSize:Math.max(11,fs-3),color:backupMsg.startsWith('✅')?C.green:backupMsg.startsWith('⚠️')?C.gold:C.red,marginTop:8,textAlign:'center',fontWeight:500}}>{backupMsg}</div>}
           </div>
         </div>)}
 
@@ -1443,7 +1466,7 @@ export default function Home() {
             steps:[
               'ทดลอง: 2 โรงเรียน · 10 ข้อ/ชุด',
               'Full Version: ทุกโรงเรียน ไม่จำกัด',
-              'สนับสนุนค่ากาแฟ 100 บาท/เดือน',
+              `สนับสนุนค่ากาแฟ ${cfg?.fullVersionPrice||'100'} บาท/เดือน`,
               'กดเมนู "4 Full" → สแกน QR โอนเงิน → แนบสลิป',
               'แอดมินส่ง PIN ให้ทาง LINE ภายใน 24 ชม.',
             ]
