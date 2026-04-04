@@ -61,37 +61,69 @@ const Btn = ({onClick,disabled,color='navy',children}:{onClick:()=>void;disabled
   return <button onClick={onClick} disabled={disabled} style={{padding:'9px 16px',borderRadius:9,border:'none',background:disabled?'#94a3b8':bg,color:'#fff',fontSize:13,fontWeight:600,cursor:disabled?'default':'pointer',fontFamily:'inherit'}}>{children}</button>
 }
 
-// ── ImgUpload component ──────────────────────────────────
-function ImgUpload({label,value,onChange,onFile,highlight=false}:{
+// ── ImgUpload component v2 — paste/click/drag ──────────────
+function ImgUpload({label,value,onChange,onFile,highlight=false,compact=false}:{
   label:string; value:string; onChange:(v:string)=>void
-  onFile:(f:File)=>void; highlight?:boolean
+  onFile:(f:File)=>void; highlight?:boolean; compact?:boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
-  const C2  = { border:'#e2e8f0', muted:'#64748b', green:'#16a34a' }
+  const [dragging,setDragging] = useState(false)
+  const G = { border:'#e2e8f0', muted:'#94a3b8', green:'#16a34a', greenL:'#f0fdf4' }
 
+  const handleFile = (f:File|null) => { if(f&&f.type.startsWith('image/')) onFile(f) }
   const onPaste = (e:React.ClipboardEvent) => {
     const item = Array.from(e.clipboardData.items).find(i=>i.type.startsWith('image/'))
-    if(item) { e.preventDefault(); const f=item.getAsFile(); if(f) onFile(f) }
+    if(item){ e.preventDefault(); handleFile(item.getAsFile()) }
+  }
+  const onDrop = (e:React.DragEvent) => {
+    e.preventDefault(); setDragging(false)
+    handleFile(e.dataTransfer.files?.[0]||null)
   }
 
   return (
-    <div style={{marginBottom:6}}>
-      <div style={{fontSize:11,color:highlight?C2.green:C2.muted,fontWeight:highlight?700:400,marginBottom:3}}>{label}</div>
+    <div style={{marginBottom:compact?4:8}}>
+      <div style={{fontSize:11,color:highlight?G.green:G.muted,fontWeight:highlight?700:500,marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
+        {highlight&&<span style={{width:6,height:6,borderRadius:3,background:G.green,display:'inline-block'}}/>}
+        {label}
+      </div>
       {value ? (
-        <div style={{position:'relative',display:'inline-block',width:'100%'}}>
-          <img src={value} alt={label} style={{width:'100%',maxHeight:100,objectFit:'contain',borderRadius:7,border:`1.5px solid ${highlight?C2.green:C2.border}`,display:'block'}}/>
+        <div style={{position:'relative'}}>
+          <img src={value} alt={label}
+            style={{width:'100%',maxHeight:compact?80:140,objectFit:'contain',borderRadius:9,
+              border:`2px solid ${highlight?G.green:G.border}`,display:'block',background:'#f8fafc'}}/>
           <button onClick={()=>onChange('')}
-            style={{position:'absolute',top:3,right:3,width:20,height:20,borderRadius:10,border:'none',background:'rgba(0,0,0,.5)',color:'#fff',fontSize:11,cursor:'pointer',lineHeight:1,padding:0}}>✕</button>
+            style={{position:'absolute',top:5,right:5,width:22,height:22,borderRadius:11,
+              border:'none',background:'rgba(0,0,0,.6)',color:'#fff',fontSize:12,
+              cursor:'pointer',lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+          <div style={{position:'absolute',bottom:5,right:5}}>
+            <label style={{fontSize:10,padding:'2px 7px',borderRadius:5,background:'rgba(0,0,0,.5)',
+              color:'#fff',cursor:'pointer'}}>
+              เปลี่ยน
+              <input type="file" accept="image/*" style={{display:'none'}}
+                onChange={e=>{handleFile(e.target.files?.[0]||null);e.target.value=''}}/>
+            </label>
+          </div>
         </div>
       ) : (
-        <div onPaste={onPaste}
+        <div
+          onPaste={onPaste}
           onClick={()=>ref.current?.click()}
-          style={{border:`1.5px dashed ${highlight?C2.green:C2.border}`,borderRadius:7,padding:'8px',textAlign:'center',cursor:'pointer',fontSize:10,color:C2.muted,background:highlight?'#f0fdf4':'#fafafa'}}>
-          📋 Ctrl+V วาง · หรือ คลิกเลือกไฟล์
+          onDragOver={e=>{e.preventDefault();setDragging(true)}}
+          onDragLeave={()=>setDragging(false)}
+          onDrop={onDrop}
+          tabIndex={0}
+          style={{border:`2px dashed ${dragging?'#3b82f6':highlight?G.green:G.border}`,
+            borderRadius:9,padding:compact?'10px 8px':'14px 8px',textAlign:'center',cursor:'pointer',
+            background:dragging?'#eff6ff':highlight?G.greenL:'#fafafa',
+            transition:'all .15s',outline:'none'}}>
+          <div style={{fontSize:compact?16:20,marginBottom:4}}>📷</div>
+          <div style={{fontSize:compact?10:11,color:dragging?'#1d4ed8':G.muted,fontWeight:500}}>
+            {dragging?'วางรูปที่นี่':'Ctrl+V วาง · คลิกเลือก · ลากวาง'}
+          </div>
         </div>
       )}
       <input ref={ref} type="file" accept="image/*" style={{display:'none'}}
-        onChange={e=>{ const f=e.target.files?.[0]; if(f){onFile(f); e.target.value=''} }}/>
+        onChange={e=>{handleFile(e.target.files?.[0]||null);e.target.value=''}}/>
     </div>
   )
 }
@@ -243,6 +275,27 @@ export default function AdminPage() {
     reader.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'))
     reader.readAsDataURL(file)
   })
+
+  // Global paste — ถ้าวางรูปในหน้า questions tab → ไปที่โจทย์ก่อน
+  useEffect(()=>{
+    if(tab!=='questions') return
+    const handler = async (e:ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items||[]).find(i=>i.type.startsWith('image/'))
+      if(!item) return
+      e.preventDefault()
+      const f = item.getAsFile()
+      if(!f) return
+      try {
+        const d = await readAndResizeImage(f)
+        // วางไปที่โจทย์ก่อน ถ้ามีแล้วไปที่เฉลย
+        if(!newQ.imageUrl) setNewQ(p=>({...p,imageUrl:d}))
+        else if(!newQ.explainImg) setNewQ(p=>({...p,explainImg:d}))
+        else setNewQ(p=>({...p,imageUrl:d}))  // แทนที่โจทย์
+      } catch(e:any){ alert(e.message) }
+    }
+    document.addEventListener('paste', handler)
+    return ()=>document.removeEventListener('paste', handler)
+  },[tab,newQ.imageUrl,newQ.explainImg,readAndResizeImage])
 
   const addQuestion = async () => {
     if(!newQ.text||!newQ.optA) return
@@ -643,7 +696,7 @@ export default function AdminPage() {
                 <div style={{fontSize:40,marginBottom:10}}>📄</div>
                 <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>คลิกเพื่อเลือกไฟล์ PDF</div>
                 <div style={{fontSize:13,color:C.muted,marginBottom:8}}>รองรับ PDF พิมพ์ · parse อัตโนมัติ</div>
-                <div style={{fontSize:11,color:'#94a3b8'}}>รองรับทั้ง PDF พิมพ์ และ PDF สแกน (OCR อัตโนมัติ)</div>
+                <div style={{fontSize:11,color:'#94a3b8'}}>PDF พิมพ์ → อ่านอัตโนมัติ · PDF สแกน → ใช้แท็บ "ข้อสอบ" + Ctrl+V วางรูปแทน</div>
               </div>
             )}
 
