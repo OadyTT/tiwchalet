@@ -26,7 +26,7 @@ const SUBJ_ICON: Record<string,string> = {'คณิตศาสตร์':'➗'
 const TRIAL_SCHOOL_LIMIT  = 2
 const TRIAL_EXAM_LIMIT    = 10
 const TRIAL_REFRESH_LIMIT = 1   // ดึงข้อสอบใหม่ได้ 1 ครั้ง
-const FONT_SIZES = [13,15,17,19] as const
+const FONT_SIZES = [13,15,17,19,22,26] as const
 const C = {
   green:'#16a34a',greenL:'#dcfce7',greenD:'#14532d',
   navy:'#1e293b', gold:'#d97706',goldL:'#fef3c7',goldD:'#78350f',
@@ -259,6 +259,7 @@ export default function Home() {
   const [showPin,setShowPin]=useState(false)
   const [showPayment,setShowPayment]=useState(false)
   const [showCompare,setShowCompare]=useState(false)
+  const [fullSuccessDays,setFullSuccessDays]=useState(0)
 
   const [fullExpiry,setFullExpiry]=useState<string|null>(null)
   const daysLeft=fullExpiry?Math.max(0,Math.ceil((new Date(fullExpiry).getTime()-Date.now())/86400000)):0
@@ -355,9 +356,11 @@ export default function Home() {
   const unlockFull=(_tok:string,data?:any)=>{
     const days=data?.fullVersionDays||45
     const exp=new Date();exp.setDate(exp.getDate()+days)
-    setPlan('full');setFullExpiry(exp.toISOString());setShowPin(false)
-    setActiveSchools(ALL_SCHOOLS) // full version เปิดทุกโรงเรียน
-    alert(`✅ ปลดล็อก Full Version! ใช้ได้ ${days} วัน`)
+    setPlan('full')
+    setFullExpiry(exp.toISOString())
+    setShowPin(false)
+    setActiveSchools(ALL_SCHOOLS)
+    setFullSuccessDays(days)   // แสดง success modal
   }
 
   const loadExam=async()=>{
@@ -586,6 +589,27 @@ export default function Home() {
 
       {/* MODALS */}
       {showPin&&<PinModal pinFor={pinFor} onSuccess={pinFor==='full'?unlockFull:unlockParent} onCancel={()=>setShowPin(false)}/>}
+      {/* ── FULL VERSION SUCCESS MODAL ── */}
+      {fullSuccessDays>0&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:900,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:24,padding:'32px 24px',width:'100%',maxWidth:320,textAlign:'center'}}>
+            <div style={{fontSize:64,marginBottom:12}}>⭐</div>
+            <div style={{fontSize:22,fontWeight:800,color:'#92400e',marginBottom:6}}>Full Version แล้ว!</div>
+            <div style={{fontSize:15,color:'#b45309',marginBottom:4}}>ใช้งานได้ {fullSuccessDays} วัน</div>
+            <div style={{background:'#fef3c7',borderRadius:12,padding:'12px',marginBottom:20,fontSize:13,color:'#78350f',lineHeight:1.6}}>
+              ✓ ข้อสอบทุกโรงเรียน ไม่จำกัด<br/>
+              ✓ ทุก 4 วิชา<br/>
+              ✓ Dashboard วิเคราะห์ผล<br/>
+              ✓ Backup & Restore
+            </div>
+            <button onClick={()=>{setFullSuccessDays(0);setScreen('home')}}
+              style={{width:'100%',padding:'14px',borderRadius:14,border:'none',background:'#d97706',color:'#fff',fontSize:16,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
+              🎉 เริ่มใช้งานเลย!
+            </button>
+          </div>
+        </div>
+      )}
+
       {showPayment&&<PaymentModal cfg={cfg} onClose={()=>setShowPayment(false)}/>}
       {showCompare&&<CompareModal onClose={()=>setShowCompare(false)} onPay={()=>{setShowCompare(false);setShowPayment(true)}}/>}
 
@@ -896,7 +920,8 @@ export default function Home() {
             {/* Font size */}
             <div style={{display:'flex',gap:1,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
               {FONT_SIZES.map((sz,i)=>(
-                <button key={sz} onClick={()=>setFontSize(sz)} style={{padding:'4px 6px',border:'none',background:fontSize===sz?C.navy:'transparent',color:fontSize===sz?'#fff':C.muted,cursor:'pointer',fontFamily:'inherit',fontSize:9+i*2,fontWeight:500}}>A</button>
+                <button key={sz} onClick={()=>setFontSize(sz)}
+                  style={{padding:'3px 5px',border:'none',background:fontSize===sz?C.navy:'transparent',color:fontSize===sz?'#fff':C.muted,cursor:'pointer',fontFamily:'inherit',fontSize:Math.min(8+i*2,18),fontWeight:fontSize===sz?700:400,lineHeight:1}}>A</button>
               ))}
             </div>
             {!isFull&&<button onClick={()=>setShowCompare(true)} style={{fontSize:11,padding:'5px 8px',borderRadius:8,border:`1px solid #fcd34d`,background:C.goldL,color:C.goldD,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>⭐</button>}
