@@ -450,7 +450,7 @@ export default function AdminPage() {
         <div style={{fontSize:36,marginBottom:12}}>⚙️</div>
         <div style={{fontSize:20,fontWeight:700,marginBottom:4,color:C.text}}>Admin Panel</div>
         <div style={{fontSize:13,color:C.muted,marginBottom:24}}>TiwChalet v2.0 · Oady</div>
-        <input value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} type="password" placeholder="PIN ผู้ปกครอง" maxLength={4} style={{...IS.style,textAlign:'center',fontSize:18,letterSpacing:8,marginBottom:12}}/>
+        <input value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} type="password" placeholder="PIN ผู้ปกครอง (5 หลัก)" maxLength={5} style={{...IS.style,textAlign:'center',fontSize:18,letterSpacing:8,marginBottom:12}}/>
         <button onClick={login} style={{width:'100%',padding:'12px',borderRadius:10,border:'none',background:C.navy,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>เข้าสู่ระบบ</button>
       </div>
     </div>
@@ -576,7 +576,7 @@ export default function AdminPage() {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <F label="PIN ผู้ปกครอง">
-                  <input value={settings.parent_pin} onChange={e=>upd('parent_pin',e.target.value)} maxLength={4} type="password" {...IS}/>
+                  <input value={settings.parent_pin} onChange={e=>upd('parent_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,5))} maxLength={5} type="password" placeholder="5 หลักตัวเลข" {...IS}/>
                 </F>
                 <F label="PIN Full Version (6 หลักตัวเลข)">
                   <input value={settings.full_version_pin} onChange={e=>upd('full_version_pin',e.target.value.replace(/[^0-9]/g,'').slice(0,6))} maxLength={6} type="password" placeholder="••••••" inputMode="numeric" {...IS}/>

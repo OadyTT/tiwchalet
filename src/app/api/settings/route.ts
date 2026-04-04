@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
     if (body[k] !== undefined) {
       // Validate PIN fields
       if ((k === 'parent_pin' || k === 'full_version_pin') &&
-          (typeof body[k] !== 'string' || !/^\d{4,6}$/.test(body[k]))) {
+          (typeof body[k] !== 'string' || (k==='parent_pin'?!/^\d{5}$/.test(body[k]):!/^\d{6}$/.test(body[k])))) {
         return NextResponse.json(
-          { ok: false, error: `${k} ต้องเป็น 4-6 หลักตัวเลข` }, { status: 400 }
+          { ok: false, error: `${k} ต้องเป็น 5 หลัก (parent_pin) หรือ 6 หลัก (full_version_pin)` }, { status: 400 }
         )
       }
       updates[k] = body[k]
