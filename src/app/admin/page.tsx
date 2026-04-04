@@ -450,7 +450,7 @@ export default function AdminPage() {
         <div style={{fontSize:36,marginBottom:12}}>⚙️</div>
         <div style={{fontSize:20,fontWeight:700,marginBottom:4,color:C.text}}>Admin Panel</div>
         <div style={{fontSize:13,color:C.muted,marginBottom:24}}>TiwChalet v2.0 · Oady</div>
-        <input value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} type="password" placeholder="PIN ผู้ปกครอง (5 หลัก)" maxLength={5} style={{...IS.style,textAlign:'center',fontSize:18,letterSpacing:8,marginBottom:12}}/>
+        <input value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} type="password" placeholder="PIN ผู้ปกครอง (4 หลัก)" maxLength={4} style={{...IS.style,textAlign:'center',fontSize:18,letterSpacing:8,marginBottom:12}}/>
         <button onClick={login} style={{width:'100%',padding:'12px',borderRadius:10,border:'none',background:C.navy,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>เข้าสู่ระบบ</button>
       </div>
     </div>

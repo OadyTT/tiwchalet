@@ -32,10 +32,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const { pin, type, clientId } = body
 
-  // parent_pin: 5 หลักตัวเลข | full_version_pin: 6 หลักตัวเลข
+  // parent_pin: 4 หลักตัวเลข | full_version_pin: 6 หลักตัวเลข
   const isParentPin = type === 'parent'
-  const pinPattern  = isParentPin ? /^\d{5}$/ : /^\d{6}$/
-  const pinHint     = isParentPin ? '5 หลักตัวเลข' : '6 หลักตัวเลข'
+  const pinPattern  = isParentPin ? /^\d{4}$/ : /^\d{6}$/
+  const pinHint     = isParentPin ? '4 หลักตัวเลข' : '6 หลักตัวเลข'
 
   if (!pin || typeof pin !== 'string' || !pinPattern.test(pin)) {
     return NextResponse.json({ ok: false, error: `PIN ต้องเป็น ${pinHint}` }, { status: 400 })
