@@ -410,6 +410,49 @@ export default function Home() {
     setTimeout(()=>setBackupMsg(''),5000)
   }
 
+  // ── Backup ทีเดียว: Supabase + Google Sheets ──
+  const doBackupAll = async () => {
+    if(!history.length){setBackupMsg('❌ ยังไม่มีประวัติผลสอบ');return}
+    setBackupBusy(true); setBackupType('cloud'); setBackupMsg('⏳ กำลัง sync ขึ้น Supabase...')
+
+    // Step 1: Sync Supabase
+    let ok=0; let fail=0
+    for(const r of history){
+      try{
+        await fetch('/api/save-result',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({school:r.school,subject:r.subject,year:r.year,
+            score:r.score,total:r.total,timeUsed:r.timeUsed,plan:r.plan,customerId})})
+        ok++
+      }catch{ fail++ }
+    }
+    const ts1 = new Date().toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+    if(fail===0) setLastCloud(ts1)
+
+    // Step 2: Sync Google Sheets
+    setBackupType('sheet'); setBackupMsg(`⏳ Supabase ✓ (${ok} ผลสอบ) · กำลัง backup ไป Google Sheets...`)
+    try{
+      const headers: Record<string,string> = {'Content-Type':'application/json','x-client-backup':'tiwchalet-parent'}
+      if(parentPin) headers['x-admin-pin'] = parentPin
+      const res=await fetch('/api/backup',{method:'POST',headers,body:JSON.stringify({})})
+      const data=await res.json()
+      const ts2 = new Date().toLocaleString('th-TH',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+      if(data.ok){
+        setLastSheet(ts2)
+        setBackupMsg(`✅ Backup สำเร็จ · Supabase ${ok} ผลสอบ · Sheets ✓`)
+        const lr=await fetch('/api/backup',{headers:{'x-admin-pin':parentPin}})
+        const ld=await lr.json()
+        if(ld.log) setBackupLog(ld.log)
+      } else {
+        setBackupMsg(`⚠️ Supabase ✓ แต่ Sheets ล้มเหลว: ${data.error||''}`)
+      }
+    }catch(e:any){
+      setBackupMsg(`⚠️ Supabase ✓ แต่ Sheets error: ${e.message}`)
+    }
+    setBackupBusy(false); setBackupType(null)
+    setTimeout(()=>setBackupMsg(''),10000)
+  }
+
   const doBackupCloud = async () => {
     // backup ขึ้น Supabase (save-result ทุก row ที่ยังไม่มี)
     if(!history.length){setBackupMsg('❌ ยังไม่มีประวัติผลสอบ');return}
@@ -966,8 +1009,8 @@ export default function Home() {
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
                   {[
                     {icon:'📱',label:'1. Backup เครื่อง',fn:doBackupLocal,c:'#1d4ed8'},
-                    {icon:'☁️',label:lastCloud?`2. Synced ${lastCloud.slice(0,5)}`:'2. Sync Supabase',fn:doBackupCloud,c:'#0891b2'},
-                    {icon:'📊',label:lastSheet?`3. Sheets ${lastSheet.slice(0,5)}`:'3. Google Sheets',fn:doBackup,c:C.green},
+                    {icon:'🔄',label:(lastCloud&&lastSheet)?`2. Backup ✓ ${lastSheet.slice(0,5)}`:'2. Backup Sheets',fn:doBackupAll,c:'#0891b2'},
+                    {icon:'🔄',label:(lastCloud||lastSheet)?`3. Backed ${(lastCloud||lastSheet||'').slice(0,5)}`:'3. Backup Cloud',fn:doBackupAll,c:C.green},
                     {icon:'♻️',label:'4. Restore',fn:()=>setShowRestoreModal(true),c:C.blue},
                     {icon:'📄',label:'5. รายงาน A4',fn:()=>setShowReportModal(true),c:'#7c3aed',disabled:!history.length},
                     {icon:'⚙️',label:'6. ตั้งค่า',fn:()=>setScreen('settings'),c:C.muted},
@@ -1357,39 +1400,39 @@ export default function Home() {
                 style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:`1.5px solid ${lastLocal?'#86efac':C.border}`,background:lastLocal?'#f0fdf4':'#fff',cursor:backupBusy?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s'}}>
                 <div style={{width:40,height:40,borderRadius:11,background:'#dbeafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>📱</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>1. บันทึกลงเครื่อง</div>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ดาวน์โหลด JSON · ใช้ offline ได้</div>
-                  {lastLocal&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ {lastLocal}</div>}
+                  <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>1. บันทึกลงเครื่อง (offline)</div>
+                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ดาวน์โหลด JSON file · ใช้ได้แม้ไม่มี internet</div>
+                  {lastLocal&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ บันทึกเมื่อ {lastLocal}</div>}
                 </div>
                 <div style={{width:28,height:28,borderRadius:8,background:'#dbeafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:C.blue,flexShrink:0}}>↓</div>
               </button>
 
-              {/* 2 Sync Supabase */}
-              <button onClick={doBackupCloud} disabled={backupBusy}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:`1.5px solid ${lastCloud?'#86efac':C.border}`,background:lastCloud?'#f0fdf4':'#fff',cursor:backupBusy&&backupType!=='cloud'?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s',opacity:backupBusy&&backupType==='cloud'?.75:1}}>
-                <div style={{width:40,height:40,borderRadius:11,background:'#cffafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>
-                  {backupBusy&&backupType==='cloud'?<span className="spin" style={{fontSize:18}}>⟳</span>:'☁️'}
+              {/* 2 Backup ขึ้น Cloud — Supabase + Google Sheets ทีเดียว */}
+              <button onClick={doBackupAll} disabled={backupBusy}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'14px',borderRadius:12,border:`2px solid ${(lastCloud&&lastSheet)?'#16a34a':C.blue}`,background:(lastCloud&&lastSheet)?C.greenL:C.blueL,cursor:backupBusy?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s',opacity:backupBusy?.75:1}}>
+                <div style={{width:44,height:44,borderRadius:12,background:(lastCloud&&lastSheet)?C.green:C.blue,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>
+                  {backupBusy?<span className="spin" style={{fontSize:20,color:'#fff'}}>⟳</span>:<span style={{filter:'brightness(10)'}}>🔄</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>2. Sync ขึ้น Supabase</div>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>บันทึก database · Restore ข้ามเครื่องได้</div>
-                  {lastCloud&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ {lastCloud}</div>}
+                  <div style={{fontSize:fs,fontWeight:700,color:(lastCloud&&lastSheet)?C.greenD:'#1e40af'}}>
+                    2. Backup ขึ้น Google Sheets
+                  </div>
+                  <div style={{display:'flex',gap:8,marginTop:3}}>
+                    <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:lastCloud?C.greenL:'#f1f5f9',color:lastCloud?C.greenD:C.muted,fontWeight:500}}>
+                      {lastCloud?`☁️ Supabase ✓`:'☁️ Supabase'}
+                    </span>
+                    <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:lastSheet?C.greenL:'#f1f5f9',color:lastSheet?C.greenD:C.muted,fontWeight:500}}>
+                      {lastSheet?`📊 Sheets ✓`:'📊 Sheets'}
+                    </span>
+                  </div>
+                  {(lastCloud||lastSheet)&&<div style={{fontSize:10,color:C.greenD,marginTop:4,fontWeight:500}}>
+                    ✓ Backup ล่าสุด {lastCloud||lastSheet}
+                  </div>}
+                  {backupMsg&&backupBusy&&<div style={{fontSize:11,color:'#1e40af',marginTop:3,fontWeight:500}}>{backupMsg.replace(/^[✅⚠️❌⏳]\s*/,'')}</div>}
                 </div>
-                <div style={{width:28,height:28,borderRadius:8,background:'#cffafe',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:'#0891b2',flexShrink:0}}>↑</div>
-              </button>
-
-              {/* 3 Google Sheets */}
-              <button onClick={doBackup} disabled={backupBusy}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,border:`1.5px solid ${lastSheet?'#86efac':C.border}`,background:lastSheet?'#f0fdf4':'#fff',cursor:backupBusy&&backupType!=='sheet'?'default':'pointer',fontFamily:'inherit',textAlign:'left',width:'100%',transition:'all .2s',opacity:backupBusy&&backupType==='sheet'?.75:1}}>
-                <div style={{width:40,height:40,borderRadius:11,background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>
-                  {backupBusy&&backupType==='sheet'?<span className="spin" style={{fontSize:18}}>⟳</span>:'📊'}
+                <div style={{fontSize:11,color:(lastCloud&&lastSheet)?C.greenD:'#1e40af',flexShrink:0,textAlign:'center'}}>
+                  <div>กด</div><div>ครั้ง</div><div>เดียว</div>
                 </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:fs-1,fontWeight:700,color:C.text}}>3. Google Sheets</div>
-                  <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>ส่งข้อมูลทั้งหมด · ดูสถิติ Excel ได้</div>
-                  {lastSheet&&<div style={{fontSize:10,color:C.green,marginTop:2,fontWeight:500}}>✓ {lastSheet}</div>}
-                </div>
-                <div style={{width:28,height:28,borderRadius:8,background:'#dcfce7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:C.green,flexShrink:0}}>↑</div>
               </button>
             </div>
 
@@ -1402,7 +1445,7 @@ export default function Home() {
 
             <div style={{background:'#fffbeb',borderRadius:9,padding:'8px 11px',fontSize:Math.max(10,fs-4),color:'#92400e',display:'flex',gap:6,alignItems:'flex-start'}}>
               <span style={{flexShrink:0}}>💡</span>
-              <span>กด <strong>2. Sync Supabase</strong> ก่อนเปลี่ยนเครื่อง · Sheets backup อัตโนมัติทุกอาทิตย์</span>
+              <span>กด <strong>2. Backup ขึ้น Google Sheets</strong> ก่อนเปลี่ยนมือถือ · ทำ Supabase + Sheets ในครั้งเดียว</span>
             </div>
           </div>
         </div>)}
