@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
 
   const allowed = [
-    'parent_pin', 'full_version_pin', 'full_version_days', 'full_version_price',
+    'parent_pin', 'full_version_pin', 'full_version_days', 'full_version_price', 'parent_name',
     'full_version_enabled', 'qr_code_image_url', 'child_name', 'child_avatar_url',
     'child_target_school', 'admin_phone', 'admin_email', 'admin_line_id',
   ]

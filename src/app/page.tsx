@@ -17,7 +17,7 @@ type PinFor = 'parent' | 'full'
 
 interface Question { id:string; text:string; opts?:string[]; opt_a?:string; opt_b?:string; opt_c?:string; opt_d?:string; ans:number; explain:string; subject:string; school:string; year:string; level:string; image_url?:string; opt_a_img?:string; opt_b_img?:string; opt_c_img?:string; opt_d_img?:string; explain_img?:string }
 interface ExamResult { id:string; school:string; subject:string; year:string; score:number; total:number; pct:number; timeUsed:number; plan:Plan; createdAt:string }
-interface AppCfg { childName:string; childAvatarUrl:string; childTargetSchool:string; qrCodeImageUrl:string; adminPhone:string; adminEmail:string; adminLineId:string; fullVersionPrice:string; fullVersionDays:number }
+interface AppCfg { childName:string; childAvatarUrl:string; childTargetSchool:string; qrCodeImageUrl:string; adminPhone:string; adminEmail:string; adminLineId:string; fullVersionPrice:string; fullVersionDays:number; parentName:string }
 interface BackupLog { last_backup:string; rows_results:number; gas_ok:boolean }
 
 const ALL_SCHOOLS  = ['สวนกุหลาบ','สามเสน','สาธิตจุฬา','สาธิตประสานมิตร','บดินทรเดชา','หอวัง']
@@ -146,16 +146,16 @@ function PaymentModal({cfg,onClose}:{cfg:AppCfg|null;onClose:()=>void}) {
         </div>
         {step==='info'&&(<div>
           <div style={{background:C.goldL,border:'1px solid #fcd34d',borderRadius:12,padding:'14px',textAlign:'center',marginBottom:16}}>
-            <div style={{fontSize:24,fontWeight:700,color:C.goldD}}>☕ สนับสนุนค่ากาแฟ</div>
-            <div style={{fontSize:20,fontWeight:600,color:C.goldD,marginTop:3}}>{price} บาท / เดือน</div>
-            <div style={{fontSize:12,color:'#b45309',marginTop:2}}>ใช้งาน Full Version {days} วัน · ไม่ต่ออัตโนมัติ</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.goldD}}>☕ สนับสนุนค่ากาแฟ</div>
+            <div style={{fontSize:28,fontWeight:800,color:C.goldD,marginTop:4}}>{price} <span style={{fontSize:16,fontWeight:600}}>บาท/เดือน</span></div>
+            <div style={{fontSize:12,color:'#b45309',marginTop:4}}>ใช้งาน Full Version {days} วัน · ไม่ต่ออัตโนมัติ</div>
           </div>
           {['ข้อสอบทุกโรงเรียน ไม่จำกัด','ทุก 4 วิชา','Dashboard วิเคราะห์ผล','Backup Google Sheets'].map(b=>(
             <div key={b} style={{display:'flex',gap:8,marginBottom:6,fontSize:13,color:C.greenD}}><span style={{color:C.green,fontWeight:700}}>✓</span>{b}</div>
           ))}
           {qr&&<div style={{textAlign:'center',margin:'16px 0 8px'}}><img src={qr} alt="QR" style={{width:160,height:160,borderRadius:12,border:`1px solid ${C.border}`,objectFit:'contain'}}/></div>}
           <div style={{background:C.blueL,borderRadius:10,padding:'12px',marginBottom:16,fontSize:13,color:C.blue}}>📱 LINE: @{lineId} · 📞 {phone}<br/>📧 {email}</div>
-          <button onClick={()=>setStep('slip')} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุน 100 บาท/เดือน →</button>
+          <button onClick={()=>setStep('slip')} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุน {price} บาท/เดือน →</button>
         </div>)}
         {step==='slip'&&(<div>
           <input value={name} onChange={e=>setName(e.target.value)} placeholder="ชื่อ-นามสกุล *" {...IS}/>
@@ -213,7 +213,7 @@ function CompareModal({onClose,onPay}:{onClose:()=>void;onPay:()=>void}) {
             </div>
           ))}
         </div>
-        <button onClick={onPay} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:8}}>☕ สนับสนุน 100 บาท/เดือน →</button>
+        <button onClick={onPay} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:8}}>☕ สนับสนุนค่ากาแฟ →</button>
         <button onClick={onClose} style={{width:'100%',padding:'10px',borderRadius:12,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>ใช้ต่อแบบทดลอง</button>
       </div>
     </div>
@@ -260,6 +260,7 @@ export default function Home() {
   const [backupMsg,setBackupMsg]=useState('')
   const [backupType,setBackupType]=useState<'local'|'cloud'|'sheet'|null>(null)
   const [editingProfile,setEditingProfile]=useState(false)
+  const [editParentName,setEditParentName]=useState('คุณแม่')
   const [showProfileModal,setShowProfileModal]=useState(false)  // modal overlay
   const [showRestoreModal,setShowRestoreModal]=useState(false)
   const [showReportModal,setShowReportModal]=useState(false)
@@ -289,7 +290,7 @@ export default function Home() {
     if(d.activeSchools) setActiveSchools(d.activeSchools)
     setCustomerId(getCustomerId())
     fetch('/api/settings').then(r=>r.json()).then(d=>{
-      if(d.settings){const s=d.settings;setCfg({childName:s.child_name,childAvatarUrl:s.child_avatar_url,childTargetSchool:s.child_target_school,qrCodeImageUrl:s.qr_code_image_url,adminPhone:s.admin_phone,adminEmail:s.admin_email,adminLineId:s.admin_line_id,fullVersionPrice:s.full_version_price,fullVersionDays:s.full_version_days||30});setEditName(s.child_name||'');setEditAvatar(s.child_avatar_url||'')}
+      if(d.settings){const s=d.settings;setCfg({childName:s.child_name,childAvatarUrl:s.child_avatar_url,childTargetSchool:s.child_target_school,qrCodeImageUrl:s.qr_code_image_url,adminPhone:s.admin_phone,adminEmail:s.admin_email,adminLineId:s.admin_line_id,fullVersionPrice:s.full_version_price,fullVersionDays:s.full_version_days||30,parentName:s.parent_name||'คุณแม่'});setEditName(s.child_name||'');setEditAvatar(s.child_avatar_url||'');setEditParentName(s.parent_name||'คุณแม่')}
     }).catch(()=>{})
   },[])
 
@@ -460,9 +461,9 @@ export default function Home() {
     if(!parentPin){alert('กรุณาเข้าโหมดผู้ปกครองก่อน');return}
     setSavingProfile(true)
     try{
-      const res=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json','x-admin-pin':parentPin},body:JSON.stringify({child_name:editName,child_avatar_url:editAvatar})})
+      const res=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json','x-admin-pin':parentPin},body:JSON.stringify({child_name:editName,child_avatar_url:editAvatar,parent_name:editParentName})})
       const data=await res.json()
-      if(data.ok){setCfg(p=>p?{...p,childName:editName,childAvatarUrl:editAvatar}:p);setEditingProfile(false)}
+      if(data.ok){setCfg(p=>p?{...p,childName:editName,childAvatarUrl:editAvatar,parentName:editParentName}:p);setEditingProfile(false)}
       else alert('เกิดข้อผิดพลาด: '+data.error)
     }catch{alert('เชื่อมต่อไม่ได้')}
     finally{setSavingProfile(false)}
@@ -475,6 +476,7 @@ export default function Home() {
   const latest=history[0]
   const avgPct=history.length?Math.round(history.reduce((a,r)=>a+r.pct,0)/history.length):0
   const childName=cfg?.childName||'น้องมิ้น'
+  const parentName=cfg?.parentName||editParentName||'คุณแม่'
   const childAvatar=cfg?.childAvatarUrl||''
   const adminLineId=cfg?.adminLineId||'Oady'
   const fs=fontSize
@@ -592,7 +594,14 @@ export default function Home() {
               }}/>
               <div style={{fontSize:10,color:C.muted}}>รองรับ JPG/PNG · auto resize เป็น 400×400px · crop จากกึ่งกลาง</div>
             </div>
-            {/* ชื่อ */}
+            {/* ชื่อผู้ปกครอง */}
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:12,fontWeight:600,color:C.muted,display:'block',marginBottom:6}}>ชื่อผู้ปกครอง (แสดงใน topbar)</label>
+              <input value={editParentName} onChange={e=>setEditParentName(e.target.value)}
+                placeholder="เช่น คุณแม่, คุณพ่อ, คุณยาย"
+                style={{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontSize:fs,color:C.text,outline:'none',fontFamily:'inherit'}}/>
+            </div>
+            {/* ชื่อนักเรียน */}
             <div style={{marginBottom:14}}>
               <label style={{fontSize:12,fontWeight:600,color:C.muted,display:'block',marginBottom:6}}>ชื่อนักเรียน</label>
               <input value={editName} onChange={e=>setEditName(e.target.value)}
@@ -790,7 +799,7 @@ export default function Home() {
             }
             <div>
               <div style={{display:'flex',alignItems:'center',gap:5}}>
-                <span style={{fontSize:fs,fontWeight:600,color:C.text}}>{mode==='parent'?'คุณแม่':childName}</span>
+                <span style={{fontSize:fs,fontWeight:600,color:C.text}}>{mode==='parent'?parentName:childName}</span>
                 {isFull?<span style={{fontSize:10,padding:'2px 7px',borderRadius:20,background:C.goldL,color:C.goldD,border:`1px solid #fcd34d`,fontWeight:600}}>⭐ {daysLeft}ว.</span>
                        :<span style={{fontSize:10,padding:'2px 7px',borderRadius:20,background:'#f1f5f9',color:C.muted}}>ทดลอง</span>}
               </div>
@@ -1381,13 +1390,9 @@ export default function Home() {
             <button onClick={()=>setScreen('home')} style={{width:34,height:34,borderRadius:10,border:`1px solid ${C.border}`,background:'#fff',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>←</button>
             <div style={{fontSize:fs+2,fontWeight:700,color:C.text}}>⭐ Full Version</div>
           </div>
-          <div style={{background:C.goldL,border:`1px solid #fcd34d`,borderRadius:14,padding:'20px',textAlign:'center',marginBottom:14}}>
-            <div style={{fontSize:fs+12,fontWeight:700,color:C.goldD,marginBottom:2}}>☕ {cfg?.fullVersionPrice||'100'} บาท/เดือน</div>
-            <div style={{fontSize:fs-1,color:'#b45309'}}>{cfg?.fullVersionDays||30} วัน · ไม่ต่ออัตโนมัติ</div>
-          </div>
           <div style={{display:'flex',flexDirection:'column',gap:9}}>
             <button onClick={()=>setShowCompare(true)} style={{width:'100%',padding:'12px',borderRadius:12,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:fs,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>เปรียบเทียบ ทดลอง vs Full →</button>
-            <button onClick={()=>setShowPayment(true)} style={{width:'100%',padding:'14px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:fs,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุนค่ากาแฟ 100 บาท/เดือน</button>
+            <button onClick={()=>setShowPayment(true)} style={{width:'100%',padding:'14px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:fs,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุนค่ากาแฟ {cfg?.fullVersionPrice||'100'} บาท/เดือน</button>
             <button onClick={()=>openPinFor('full')} style={{width:'100%',padding:'12px',borderRadius:12,border:`1px solid ${C.border}`,background:'transparent',color:C.text,fontSize:fs,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>🔑 มีรหัส Full Version แล้ว</button>
           </div>
         </div>)}

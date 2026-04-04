@@ -69,6 +69,7 @@ create table if not exists settings (
   full_version_enabled  boolean default true,
   qr_code_image_url     text    default '',
   child_name            text    default 'น้องมิ้น',
+  parent_name           text    default 'คุณแม่',
   child_avatar_url      text    default '',
   child_target_school   text    default 'สาธิตจุฬา',
   admin_phone           text    default '0XX-XXX-XXXX',
