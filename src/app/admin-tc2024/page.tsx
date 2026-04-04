@@ -166,6 +166,8 @@ export default function AdminPage() {
   const [pdfQs,setPdfQs]=useState<PdfQuestion[]>([])
   const [editIdx,setEditIdx]=useState<number|null>(null)
   const pdfRef=useRef<HTMLInputElement>(null)
+  const [pastedImages,setPastedImages]=useState<string[]>([])  // รูปที่ paste มา
+  const [addingPasted,setAddingPasted]=useState(false)
 
   // stats tab
   const [stats,setStats]=useState<any[]>([])
@@ -342,7 +344,7 @@ export default function AdminPage() {
     onProgress('โหลด PDF reader...')
     const pdfjsLib = await import('pdfjs-dist')
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+      `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
     const numPages = pdf.numPages
 
@@ -691,14 +693,115 @@ export default function AdminPage() {
               </div>
             </Sec>
 
-            {pdfStep==='idle'&&(
-              <div onClick={()=>pdfRef.current?.click()} style={{border:'2px dashed #cbd5e1',borderRadius:14,padding:'32px',textAlign:'center',cursor:'pointer',background:'#fafafa'}}>
-                <div style={{fontSize:40,marginBottom:10}}>📄</div>
-                <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:4}}>คลิกเพื่อเลือกไฟล์ PDF</div>
-                <div style={{fontSize:13,color:C.muted,marginBottom:8}}>รองรับ PDF พิมพ์ · parse อัตโนมัติ</div>
-                <div style={{fontSize:11,color:'#94a3b8'}}>PDF พิมพ์ → อ่านอัตโนมัติ · PDF สแกน → ใช้แท็บ "ข้อสอบ" + Ctrl+V วางรูปแทน</div>
+            {pdfStep==='idle'&&(<div>
+              {/* ── วิธีที่ 1: Paste รูปภาพ (PDF สแกน) ── */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{background:'#fef3c7',borderRadius:6,padding:'2px 8px',fontSize:12,color:'#92400e'}}>แนะนำ</span>
+                  วิธีที่ 1 — วางรูปภาพจาก PDF สแกน
+                </div>
+                <div
+                  onPaste={e=>{
+                    const items=Array.from(e.clipboardData.items).filter(i=>i.type.startsWith('image/'))
+                    if(!items.length) return
+                    e.preventDefault()
+                    items.forEach(item=>{
+                      const f=item.getAsFile(); if(!f) return
+                      const reader=new FileReader()
+                      reader.onload=ev=>{
+                        const url=ev.target?.result as string
+                        setPastedImages(p=>[...p,url])
+                      }
+                      reader.readAsDataURL(f)
+                    })
+                  }}
+                  onDragOver={e=>e.preventDefault()}
+                  onDrop={e=>{
+                    e.preventDefault()
+                    Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')).forEach(f=>{
+                      const reader=new FileReader()
+                      reader.onload=ev=>setPastedImages(p=>[...p,ev.target?.result as string])
+                      reader.readAsDataURL(f)
+                    })
+                  }}
+                  tabIndex={0}
+                  style={{border:'2px dashed #fcd34d',borderRadius:12,padding:'20px',textAlign:'center',cursor:'text',background:'#fffbeb',outline:'none'}}
+                >
+                  <div style={{fontSize:32,marginBottom:6}}>📋</div>
+                  <div style={{fontSize:14,fontWeight:700,color:'#92400e',marginBottom:4}}>
+                    Ctrl+V วางรูป Screenshot PDF ที่นี่
+                  </div>
+                  <div style={{fontSize:12,color:'#b45309'}}>หรือลากไฟล์รูป JPG/PNG มาวาง</div>
+                  <div style={{fontSize:11,color:'#d97706',marginTop:4}}>
+                    Screenshot PDF ทีละหน้า → วางทีละภาพ → ระบบเพิ่มเป็นรูปในข้อสอบให้
+                  </div>
+                </div>
+
+                {/* แสดงรูปที่ paste มา */}
+                {pastedImages.length>0&&(
+                  <div style={{marginTop:10}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text}}>{pastedImages.length} รูป — กดเพิ่มเป็นข้อสอบ (รูปโจทย์)</div>
+                      <button onClick={()=>setPastedImages([])} style={{fontSize:11,padding:'2px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:'transparent',color:C.red,cursor:'pointer',fontFamily:'inherit'}}>ล้างทั้งหมด</button>
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:10}}>
+                      {pastedImages.map((img,i)=>(
+                        <div key={i} style={{position:'relative'}}>
+                          <img src={img} alt={`หน้า ${i+1}`} style={{width:'100%',height:90,objectFit:'cover',borderRadius:8,border:`1px solid ${C.border}`}}/>
+                          <div style={{position:'absolute',top:3,left:3,background:'rgba(0,0,0,.6)',color:'#fff',fontSize:9,padding:'1px 5px',borderRadius:4}}>หน้า {i+1}</div>
+                          <button onClick={()=>setPastedImages(p=>p.filter((_,j)=>j!==i))}
+                            style={{position:'absolute',top:3,right:3,width:18,height:18,borderRadius:9,border:'none',background:'rgba(220,38,38,.8)',color:'#fff',fontSize:10,cursor:'pointer',padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={async()=>{
+                        if(!pastedImages.length) return
+                        setAddingPasted(true)
+                        // เพิ่มข้อสอบแต่ละรูปเป็น question ที่มีแค่รูปโจทย์ รอให้ admin กรอกเนื้อหาทีหลัง
+                        let added=0
+                        for(const img of pastedImages){
+                          try{
+                            await fetch('/api/questions',{method:'POST',headers:{'Content-Type':'application/json','x-admin-pin':pin},
+                              body:JSON.stringify({
+                                school:pdfMeta.school, year:pdfMeta.year, subject:pdfMeta.subject,
+                                level:'ปานกลาง', text:'(รูปโจทย์ — กรอกข้อความเพิ่มเติมที่แท็บข้อสอบ)',
+                                opt_a:'ก', opt_b:'ข', opt_c:'ค', opt_d:'ง', ans:0,
+                                explain:'', image_url:img, source:'paste-image',
+                              })})
+                            added++
+                          }catch{}
+                        }
+                        setPastedImages([])
+                        setAddingPasted(false)
+                        await loadAll(pin)
+                        alert(`✅ เพิ่ม ${added} ข้อสอบ (รูปโจทย์) แล้ว
+ไปที่แท็บ "ข้อสอบ" เพื่อกรอกตัวเลือกและเฉลย`)
+                      }}
+                      disabled={addingPasted}
+                      style={{width:'100%',padding:'11px',borderRadius:11,border:'none',background:addingPasted?'#94a3b8':'#d97706',color:'#fff',fontSize:13,fontWeight:700,cursor:addingPasted?'default':'pointer',fontFamily:'inherit'}}>
+                      {addingPasted?<><span className="spin">⟳</span> กำลังเพิ่ม...</>:`➕ เพิ่ม ${pastedImages.length} รูป เป็นข้อสอบ`}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div style={{display:'flex',alignItems:'center',gap:8,margin:'14px 0'}}>
+                <div style={{flex:1,height:1,background:C.border}}/>
+                <span style={{fontSize:11,color:C.muted}}>หรือ</span>
+                <div style={{flex:1,height:1,background:C.border}}/>
+              </div>
+
+              {/* ── วิธีที่ 2: อัพโหลด PDF ── */}
+              <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:8}}>
+                วิธีที่ 2 — อัพโหลดไฟล์ PDF (พิมพ์เท่านั้น)
+              </div>
+              <div onClick={()=>pdfRef.current?.click()} style={{border:'2px dashed #cbd5e1',borderRadius:12,padding:'20px',textAlign:'center',cursor:'pointer',background:'#f8fafc'}}>
+                <div style={{fontSize:32,marginBottom:8}}>📄</div>
+                <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:4}}>คลิกเลือกไฟล์ PDF</div>
+                <div style={{fontSize:11,color:'#94a3b8'}}>รองรับเฉพาะ PDF พิมพ์จากคอมพิวเตอร์ · PDF สแกนใช้วิธีที่ 1</div>
+              </div>
+            </div>)}
 
             {(pdfStep==='reading'||pdfStep==='parsing'||pdfStep==='importing')&&(
               <div style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'24px 20px',textAlign:'center'}}>
