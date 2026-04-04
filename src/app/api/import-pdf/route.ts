@@ -99,12 +99,12 @@ function parseAll(fullText: string, school: string, defaultSubj: string, year: s
 // ── API ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const adminPin = req.headers.get('x-admin-pin') || ''
-  if (!adminPin || !/^\d{4,6}$/.test(adminPin)) {
+  if (!adminPin || !/^\d{6}$/.test(adminPin)) {
     return NextResponse.json({ ok:false, error:'Unauthorized' }, { status:401 })
   }
   const sb = getServiceClient()
   const { data: cfg } = await sb.from('settings').select('parent_pin').eq('id',1).single()
-  if (!cfg || adminPin !== cfg.parent_pin) {
+  if (!cfg || adminPin !== cfg.admin_pin) {
     return NextResponse.json({ ok:false, error:'PIN ไม่ถูกต้อง' }, { status:401 })
   }
 

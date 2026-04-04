@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
 
   const allowed = [
-    'parent_pin', 'full_version_pin', 'full_version_days', 'full_version_price', 'parent_name',
+    'parent_pin', 'admin_pin', 'full_version_pin', 'full_version_days', 'full_version_price', 'parent_name',
     'full_version_enabled', 'qr_code_image_url', 'child_name', 'child_avatar_url',
     'child_target_school', 'admin_phone', 'admin_email', 'admin_line_id',
   ]
@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
     if (body[k] !== undefined) {
       // Validate PIN fields
       if ((k === 'parent_pin' || k === 'full_version_pin') &&
-          (typeof body[k] !== 'string' || (k==='parent_pin'?!/^\d{5}$/.test(body[k]):!/^\d{6}$/.test(body[k])))) {
+          (typeof body[k] !== 'string' || (k==='parent_pin'?!/^\d{4}$/.test(body[k]):!/^\d{6}$/.test(body[k])))) {
         return NextResponse.json(
-          { ok: false, error: `${k} ต้องเป็น 5 หลัก (parent_pin) หรือ 6 หลัก (full_version_pin)` }, { status: 400 }
+          { ok: false, error: `parent_pin=4หลัก, admin_pin/full_version_pin=6หลัก` }, { status: 400 }
         )
       }
       updates[k] = body[k]

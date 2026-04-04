@@ -191,7 +191,7 @@ export default function AdminPage() {
   }
 
   const login = async () => {
-    const res  = await fetch('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin,type:'parent',clientId:'admin-page'})})
+    const res  = await fetch('/api/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin,type:'admin',clientId:'admin-page'})})
     const data = await res.json()
     if(data.ok){ setAuthed(true); await loadAll(pin) }
     else alert(data.error||'PIN ไม่ถูกต้อง')
@@ -450,7 +450,7 @@ export default function AdminPage() {
         <div style={{fontSize:36,marginBottom:12}}>⚙️</div>
         <div style={{fontSize:20,fontWeight:700,marginBottom:4,color:C.text}}>Admin Panel</div>
         <div style={{fontSize:13,color:C.muted,marginBottom:24}}>TiwChalet v2.0 · Oady</div>
-        <input value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} type="password" placeholder="PIN ผู้ปกครอง (5 หลัก)" maxLength={5} style={{...IS.style,textAlign:'center',fontSize:18,letterSpacing:8,marginBottom:12}}/>
+        <input value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} type="password" placeholder="Admin PIN (6 หลัก)" maxLength={6} style={{...IS.style,textAlign:'center',fontSize:18,letterSpacing:8,marginBottom:12}}/>
         <button onClick={login} style={{width:'100%',padding:'12px',borderRadius:10,border:'none',background:C.navy,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>เข้าสู่ระบบ</button>
       </div>
     </div>
@@ -576,7 +576,15 @@ export default function AdminPage() {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <F label="PIN ผู้ปกครอง">
-                  <input value={settings.parent_pin} onChange={e=>upd('parent_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,5))} maxLength={5} type="password" placeholder="5 หลักตัวเลข" {...IS}/>
+                  <input value={(settings as any).admin_pin || ""} onChange={e=>upd('admin_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,6))} maxLength={6} type="password" placeholder="6 หลักตัวเลข" {...IS}/>
+                </F>
+                <F label="Parent PIN (4 หลักตัวเลข) — ผู้ปกครองใช้ในแอป">
+                  <input value={(settings as any).parent_pin||''} onChange={e=>upd('parent_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,4))} maxLength={4} type="password" placeholder="4 หลักตัวเลข" {...IS}/>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:2}}>ผู้ปกครองกด 4 หลักเพื่อเข้าโหมดผู้ปกครองในแอป</div>
+                </F>
+                <F label="Admin PIN (6 หลักตัวเลข) — สำหรับ admin page นี้">
+                  <input value={(settings as any).admin_pin||''} onChange={e=>upd('admin_pin',e.target.value.replace(/[^0-9]/g,"").slice(0,6))} maxLength={6} type="password" placeholder="6 หลักตัวเลข" {...IS}/>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:2}}>ใช้ login admin page นี้ · เปลี่ยนแล้ว logout/login ใหม่</div>
                 </F>
                 <F label="PIN Full Version (6 หลักตัวเลข)">
                   <input value={settings.full_version_pin} onChange={e=>upd('full_version_pin',e.target.value.replace(/[^0-9]/g,'').slice(0,6))} maxLength={6} type="password" placeholder="••••••" inputMode="numeric" {...IS}/>

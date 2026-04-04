@@ -155,8 +155,8 @@ export async function POST(req: NextRequest) {
 
   // ตรวจ PIN
   const sb = getServiceClient()
-  const { data: cfg } = await sb.from('settings').select('parent_pin').eq('id', 1).single()
-  if (!cfg || adminPin !== cfg.parent_pin) {
+  const { data: cfg } = await sb.from('settings').select('admin_pin').eq('id', 1).single()
+  if (!cfg || adminPin !== cfg.admin_pin) {
     return NextResponse.json({ ok: false, error: 'PIN ไม่ถูกต้อง' }, { status: 401 })
   }
 
@@ -194,8 +194,8 @@ export async function DELETE(req: NextRequest) {
   if (!adminPin) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 
   const sb = getServiceClient()
-  const { data: cfg } = await sb.from('settings').select('parent_pin').eq('id', 1).single()
-  if (!cfg || adminPin !== cfg.parent_pin) {
+  const { data: cfg } = await sb.from('settings').select('admin_pin').eq('id', 1).single()
+  if (!cfg || adminPin !== cfg.admin_pin) {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
   }
 

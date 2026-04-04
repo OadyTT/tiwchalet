@@ -70,19 +70,19 @@ function PinModal({pinFor,onSuccess,onCancel}:{pinFor:PinFor;onSuccess:(t:string
   const tap=async(d:string)=>{
     if(busy||pinFor!=='parent') return
     const next=d==='⌫'?pin.slice(0,-1):pin+d
-    if(next.length>5) return
+    if(next.length>4) return
     setPin(next); setErr('')
-    if(next.length===5) await doVerify(next)
+    if(next.length===4) await doVerify(next)
   }
   const isParent=pinFor==='parent'
-  const maxLen=isParent?5:6
+  const maxLen=isParent?4:6
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:700,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div style={{background:'#fff',borderRadius:20,padding:'28px 22px',width:'100%',maxWidth:300,textAlign:'center',animation:shake?'shake .35s ease':undefined}}>
         <style>{`@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}`}</style>
         <div style={{fontSize:17,fontWeight:700,marginBottom:8,color:C.text}}>{isParent?'🔒 โหมดผู้ปกครอง':'⭐ ปลดล็อก Full Version'}</div>
-        <div style={{fontSize:13,color:err?C.red:C.muted,marginBottom:16,minHeight:18}}>{err||(isParent?'ใส่รหัส 5 หลัก':'ใส่รหัส 6 หลักตัวเลข')}</div>
+        <div style={{fontSize:13,color:err?C.red:C.muted,marginBottom:16,minHeight:18}}>{err||(isParent?'ใส่รหัส 4 หลัก':'ใส่รหัส 6 หลักตัวเลข')}</div>
         {!isParent?(
           <>
             <div style={{display:'flex',justifyContent:'center',gap:10,marginBottom:20}}>
@@ -98,7 +98,7 @@ function PinModal({pinFor,onSuccess,onCancel}:{pinFor:PinFor;onSuccess:(t:string
         ):(
           <>
             <div style={{display:'flex',justifyContent:'center',gap:14,marginBottom:20}}>
-              {[0,1,2,3,4].map(i=><div key={i} style={{width:13,height:13,borderRadius:'50%',background:i<pin.length?C.navy:'#e2e8f0',transition:'background .12s'}}/>)}
+              {[0,1,2,3].map(i=><div key={i} style={{width:13,height:13,borderRadius:'50%',background:i<pin.length?C.navy:'#e2e8f0',transition:'background .12s'}}/>)}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
               {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d,i)=>d===''?<div key={i}/>:
@@ -313,7 +313,7 @@ export default function Home() {
   const openPinFor=(pf:PinFor)=>{setPinFor(pf);setShowPin(true)}
   const unlockParent=(_tok:string,data?:any)=>{
     setMode('parent');setShowPin(false)
-    // เก็บ PIN จริง (5 หลัก) ไว้ส่ง x-admin-pin header — ไม่ใช่ token UUID
+    // เก็บ PIN จริง (4 หลัก parent) ไว้ส่ง x-admin-pin header — ไม่ใช่ token UUID
     if(data?._rawPin) setParentPin(data._rawPin)
     if(data?.settings){const s=data.settings;setCfg(p=>p?{...p,childName:s.childName||p.childName,childAvatarUrl:s.childAvatarUrl||p.childAvatarUrl,childTargetSchool:s.childTargetSchool||p.childTargetSchool,qrCodeImageUrl:s.qrCodeImageUrl||p.qrCodeImageUrl,adminPhone:s.adminPhone||p.adminPhone,adminEmail:s.adminEmail||p.adminEmail,adminLineId:s.adminLineId||p.adminLineId,fullVersionPrice:s.fullVersionPrice||p.fullVersionPrice}:null);setEditName(s.childName||'');setEditAvatar(s.childAvatarUrl||'')}
     // load backup log
@@ -380,7 +380,7 @@ export default function Home() {
     fetch('/api/save-result',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({school:selSchool,subject:selSubject,year:selYear,score:sc,total:questions.length,timeUsed:tu,plan,customerId})}).catch(()=>{})
   },[questions,selSchool,selSubject,selYear,answers,timeLeft,plan])
 
-  // ← Backup — ใช้ parentPin (5 หลัก) ตรงๆ
+  // ← Backup — ใช้ parentPin (4 หลัก) ตรงๆ
   // ── Backup 3 แบบ ──
   const doBackupLocal = () => {
     // backup ลงในเครื่อง: export history + customerId เป็น JSON file
@@ -1432,7 +1432,7 @@ export default function Home() {
             color:C.green, bg:C.greenL,
             steps:[
               'กดปุ่ม "🔒 ผู้ปกครอง" มุมขวาบน',
-              'ใส่รหัส 5 หลัก (ได้จากแอดมิน)',
+              'ใส่รหัส 4 หลัก (ได้จากแอดมิน)',
               'ดู Dashboard · Restore · รายงาน A4',
               'กด "🔓 ออก" เพื่อกลับโหมดนักเรียน',
             ]

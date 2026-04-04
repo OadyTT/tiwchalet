@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
   const sb = getServiceClient()
   if (mode === 'admin') {
     if (!adminPin) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-    const { data: cfg } = await sb.from('settings').select('parent_pin').eq('id', 1).single()
-    if (!cfg || adminPin !== cfg.parent_pin) {
+    const { data: cfg } = await sb.from('settings').select('admin_pin').eq('id', 1).single()
+    if (!cfg || adminPin !== cfg.admin_pin) {
       return NextResponse.json({ ok: false, error: 'PIN ไม่ถูกต้อง' }, { status: 401 })
     }
   }
