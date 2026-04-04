@@ -11,7 +11,7 @@ import type { Subject } from '@/types'
 
 const VERSION = 'v2.2'
 type Mode   = 'student' | 'parent'
-type Screen = 'home'|'pick'|'exam'|'result'|'progress'|'upgrade'|'settings'|'compare'
+type Screen = 'home'|'pick'|'exam'|'result'|'progress'|'upgrade'|'settings'|'compare'|'help'
 type Plan   = 'trial' | 'full'
 type PinFor = 'parent' | 'full'
 
@@ -133,7 +133,7 @@ function PaymentModal({cfg,onClose}:{cfg:AppCfg|null;onClose:()=>void}) {
     catch{alert('เชื่อมต่อไม่ได้')}finally{setSending(false)}
   }
   const IS={style:{width:'100%',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${C.border}`,background:'#fafafa',fontFamily:'inherit',fontSize:14,color:C.text,outline:'none',marginBottom:10} as React.CSSProperties}
-  const price=cfg?.fullVersionPrice||'299'; const days=cfg?.fullVersionDays||45
+  const price=cfg?.fullVersionPrice||'100'; const days=cfg?.fullVersionDays||45
   const lineId=cfg?.adminLineId||'Oady'; const phone=cfg?.adminPhone||'-'
   const email=cfg?.adminEmail||'thitiphankk@gmail.com'; const qr=cfg?.qrCodeImageUrl||''
 
@@ -146,19 +146,21 @@ function PaymentModal({cfg,onClose}:{cfg:AppCfg|null;onClose:()=>void}) {
         </div>
         {step==='info'&&(<div>
           <div style={{background:C.goldL,border:'1px solid #fcd34d',borderRadius:12,padding:'14px',textAlign:'center',marginBottom:16}}>
-            <div style={{fontSize:26,fontWeight:700,color:C.goldD}}>{price} บาท / {days} วัน</div>
+            <div style={{fontSize:24,fontWeight:700,color:C.goldD}}>☕ สนับสนุนค่ากาแฟ</div>
+            <div style={{fontSize:20,fontWeight:600,color:C.goldD,marginTop:3}}>{price} บาท / เดือน</div>
+            <div style={{fontSize:12,color:'#b45309',marginTop:2}}>ใช้งาน Full Version {days} วัน · ไม่ต่ออัตโนมัติ</div>
           </div>
           {['ข้อสอบทุกโรงเรียน ไม่จำกัด','ทุก 4 วิชา','Dashboard วิเคราะห์ผล','Backup Google Sheets'].map(b=>(
             <div key={b} style={{display:'flex',gap:8,marginBottom:6,fontSize:13,color:C.greenD}}><span style={{color:C.green,fontWeight:700}}>✓</span>{b}</div>
           ))}
           {qr&&<div style={{textAlign:'center',margin:'16px 0 8px'}}><img src={qr} alt="QR" style={{width:160,height:160,borderRadius:12,border:`1px solid ${C.border}`,objectFit:'contain'}}/></div>}
           <div style={{background:C.blueL,borderRadius:10,padding:'12px',marginBottom:16,fontSize:13,color:C.blue}}>📱 LINE: @{lineId} · 📞 {phone}<br/>📧 {email}</div>
-          <button onClick={()=>setStep('slip')} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>แนบสลิปชำระเงิน →</button>
+          <button onClick={()=>setStep('slip')} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุน 100 บาท/เดือน →</button>
         </div>)}
         {step==='slip'&&(<div>
           <input value={name} onChange={e=>setName(e.target.value)} placeholder="ชื่อ-นามสกุล *" {...IS}/>
           <input value={contact} onChange={e=>setContact(e.target.value)} placeholder="LINE ID หรือเบอร์โทร" {...IS}/>
-          <input value={amount} onChange={e=>setAmount(e.target.value)} placeholder={`จำนวนเงิน (${price} บาท)`} type="number" {...IS}/>
+          <input value={amount} onChange={e=>setAmount(e.target.value)} placeholder={`จำนวนที่โอน (${price} บาท)`} type="number" {...IS}/>
           <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="หมายเหตุ" rows={2} {...IS as any}/>
           <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={onSlip}/>
           <button onClick={()=>fileRef.current?.click()} style={{width:'100%',padding:'12px',borderRadius:10,border:`2px dashed #cbd5e1`,background:'#fafafa',cursor:'pointer',fontFamily:'inherit',fontSize:13,color:C.muted,marginBottom:slipPreview?8:16}}>
@@ -166,13 +168,13 @@ function PaymentModal({cfg,onClose}:{cfg:AppCfg|null;onClose:()=>void}) {
           </button>
           {slipPreview&&<img src={slipPreview} alt="slip" style={{width:'100%',maxHeight:200,objectFit:'contain',borderRadius:10,border:`1px solid ${C.border}`,marginBottom:12}}/>}
           <button onClick={submit} disabled={sending||!name.trim()||!slipB64} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:name.trim()&&slipB64?C.green:'#d1d5db',color:'#fff',fontSize:15,fontWeight:700,cursor:name.trim()&&slipB64?'pointer':'default',fontFamily:'inherit'}}>
-            {sending?'กำลังส่ง...':'ส่งสลิปให้ Admin'}
+            {sending?'กำลังส่ง...':'✅ ส่งหลักฐานให้แอดมิน'}
           </button>
         </div>)}
         {step==='done'&&(<div style={{textAlign:'center',padding:'20px 0'}}>
           <div style={{fontSize:48,marginBottom:12}}>✅</div>
           <div style={{fontSize:18,fontWeight:700,marginBottom:8,color:C.text}}>ส่งสลิปแล้ว!</div>
-          <div style={{fontSize:14,color:C.muted,lineHeight:1.7,marginBottom:16}}>Admin จะส่ง PIN ทาง LINE ภายใน 24 ชั่วโมง</div>
+          <div style={{fontSize:14,color:C.muted,lineHeight:1.7,marginBottom:16}}>แอดมินจะส่ง PIN Full Version ทาง LINE ภายใน 24 ชั่วโมง ขอบคุณที่สนับสนุน ☕</div>
           <div style={{fontSize:12,color:C.blue,marginBottom:20}}>Ref: {reqId}</div>
           <button onClick={onClose} style={{padding:'10px 28px',borderRadius:12,border:'none',background:C.navy,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>ปิด</button>
         </div>)}
@@ -211,7 +213,7 @@ function CompareModal({onClose,onPay}:{onClose:()=>void;onPay:()=>void}) {
             </div>
           ))}
         </div>
-        <button onClick={onPay} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:8}}>สมัคร Full Version →</button>
+        <button onClick={onPay} style={{width:'100%',padding:'13px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'inherit',marginBottom:8}}>☕ สนับสนุน 100 บาท/เดือน →</button>
         <button onClick={onClose} style={{width:'100%',padding:'10px',borderRadius:12,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>ใช้ต่อแบบทดลอง</button>
       </div>
     </div>
@@ -1213,7 +1215,7 @@ export default function Home() {
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <button onClick={()=>openPinFor('full')} style={{padding:'9px',borderRadius:10,border:'none',background:C.navy,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>🔑 มีรหัส</button>
-                  <button onClick={()=>setShowPayment(true)} style={{padding:'9px',borderRadius:10,border:'none',background:C.gold,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>💳 ชำระเงิน</button>
+                  <button onClick={()=>setShowPayment(true)} style={{padding:'9px',borderRadius:10,border:'none',background:C.gold,color:'#fff',fontSize:fs-1,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุน 100฿</button>
                 </div>
               </div>
             )}
@@ -1276,29 +1278,145 @@ export default function Home() {
             <div style={{fontSize:fs+2,fontWeight:700,color:C.text}}>⭐ Full Version</div>
           </div>
           <div style={{background:C.goldL,border:`1px solid #fcd34d`,borderRadius:14,padding:'20px',textAlign:'center',marginBottom:14}}>
-            <div style={{fontSize:fs+12,fontWeight:700,color:C.goldD,marginBottom:2}}>{cfg?.fullVersionPrice||'299'} บาท</div>
+            <div style={{fontSize:fs+12,fontWeight:700,color:C.goldD,marginBottom:2}}>☕ {cfg?.fullVersionPrice||'100'} บาท/เดือน</div>
             <div style={{fontSize:fs-1,color:'#b45309'}}>{cfg?.fullVersionDays||30} วัน · ไม่ต่ออัตโนมัติ</div>
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:9}}>
             <button onClick={()=>setShowCompare(true)} style={{width:'100%',padding:'12px',borderRadius:12,border:`1px solid ${C.border}`,background:'#fff',color:C.text,fontSize:fs,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>เปรียบเทียบ ทดลอง vs Full →</button>
-            <button onClick={()=>setShowPayment(true)} style={{width:'100%',padding:'14px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:fs,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>💳 ชำระเงิน / แนบสลิป</button>
+            <button onClick={()=>setShowPayment(true)} style={{width:'100%',padding:'14px',borderRadius:12,border:'none',background:C.gold,color:'#fff',fontSize:fs,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>☕ สนับสนุนค่ากาแฟ 100 บาท/เดือน</button>
             <button onClick={()=>openPinFor('full')} style={{width:'100%',padding:'12px',borderRadius:12,border:`1px solid ${C.border}`,background:'transparent',color:C.text,fontSize:fs,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>🔑 มีรหัส Full Version แล้ว</button>
           </div>
         </div>)}
 
       </div>
 
+      {/* ── HELP SCREEN ── */}
+      {screen==='help'&&(<div className="fu" style={{paddingBottom:8}}>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:fs+4,fontWeight:700,color:C.text,marginBottom:2}}>❓ วิธีใช้งาน</div>
+          <div style={{fontSize:fs-1,color:C.muted}}>คู่มือฉบับย่อ — ติวฉลาด {VERSION}</div>
+        </div>
+
+        {/* Quick cards */}
+        {[
+          {
+            n:'1', icon:'📝', title:'เริ่มทำข้อสอบ',
+            color:C.blue, bg:C.blueL,
+            steps:[
+              'กดเมนู "2 สอบ" ที่ด้านล่าง',
+              'เลือกปี → วิชา → โรงเรียน',
+              'กด "เริ่ม" → ตอบคำถาม → ส่งคำตอบ',
+              'ดูเฉลยละเอียดทุกข้อได้ทันที',
+            ]
+          },
+          {
+            n:'2', icon:'📊', title:'ดูผลและประวัติ',
+            color:'#7c3aed', bg:'#ede9fe',
+            steps:[
+              'กดเมนู "3 ผล" เพื่อดูประวัติทั้งหมด',
+              'เห็นคะแนน % และกราฟแต่ละวิชา',
+              'ผู้ปกครอง: กด "1 Dashboard" เพื่อดูสถิติ',
+            ]
+          },
+          {
+            n:'3', icon:'🔒', title:'โหมดผู้ปกครอง',
+            color:C.green, bg:C.greenL,
+            steps:[
+              'กดปุ่ม "🔒 ผู้ปกครอง" มุมขวาบน',
+              'ใส่รหัส 4 หลัก (ได้จากแอดมิน)',
+              'ดู Dashboard · Restore · รายงาน A4',
+              'กด "🔓 ออก" เพื่อกลับโหมดนักเรียน',
+            ]
+          },
+          {
+            n:'4', icon:'⭐', title:'Full Version',
+            color:C.gold, bg:C.goldL,
+            steps:[
+              'ทดลอง: 2 โรงเรียน · 10 ข้อ/ชุด',
+              'Full Version: ทุกโรงเรียน ไม่จำกัด',
+              'สนับสนุนค่ากาแฟ 100 บาท/เดือน',
+              'กดเมนู "4 Full" → สแกน QR โอนเงิน → แนบสลิป',
+              'แอดมินส่ง PIN ให้ทาง LINE ภายใน 24 ชม.',
+            ]
+          },
+          {
+            n:'5', icon:'♻️', title:'Restore ข้อมูล',
+            color:'#0891b2', bg:'#ecfeff',
+            steps:[
+              'เปลี่ยนมือถือ/ข้อมูลหาย → ใช้ Restore',
+              'เข้าโหมดผู้ปกครอง → Settings → Restore',
+              'ใส่ CustomerID เก่า → กด Restore',
+              'CustomerID อยู่ใน Settings ของ device เก่า',
+            ]
+          },
+          {
+            n:'6', icon:'📄', title:'รายงาน A4',
+            color:'#0f172a', bg:'#f8fafc',
+            steps:[
+              'เข้าโหมดผู้ปกครอง → Settings → รายงาน',
+              'กด "ดู / บันทึกรายงาน A4"',
+              'กด "💾 บันทึก JPG" → download ไฟล์',
+              'แชร์ให้ครูหรือเก็บไว้ติดตาม',
+            ]
+          },
+        ].map(card=>(
+          <div key={card.n} style={{background:'#fff',border:`1px solid ${C.border}`,borderRadius:14,padding:'14px',marginBottom:10}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+              <div style={{width:34,height:34,borderRadius:10,background:card.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{card.icon}</div>
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:11,fontWeight:700,padding:'2px 7px',borderRadius:20,background:card.bg,color:card.color}}>ขั้นที่ {card.n}</span>
+                </div>
+                <div style={{fontSize:fs,fontWeight:700,color:C.text}}>{card.title}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {card.steps.map((s,i)=>(
+                <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                  <div style={{width:18,height:18,borderRadius:9,background:card.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:card.color,flexShrink:0,marginTop:1}}>{i+1}</div>
+                  <div style={{fontSize:Math.max(12,fs-2),color:C.text,lineHeight:1.5}}>{s}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Contact */}
+        <div style={{background:C.greenL,border:`1px solid #86efac`,borderRadius:14,padding:'14px',marginBottom:10}}>
+          <div style={{fontSize:fs,fontWeight:700,color:C.greenD,marginBottom:8}}>📞 ติดต่อแอดมิน</div>
+          <a href={`https://line.me/ti/p/~${cfg?.adminLineId||'Oady'}`} target="_blank" rel="noopener noreferrer"
+            style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:10,background:'#06c755',color:'#fff',textDecoration:'none',marginBottom:6}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 5.92 2 10.74c0 2.61 1.34 4.94 3.45 6.51L4.5 21l4.05-1.96C9.6 19.64 10.78 19.85 12 19.85c5.52 0 10-3.92 10-8.74S17.52 2 12 2z"/></svg>
+            <div>
+              <div style={{fontSize:fs-1,fontWeight:700}}>Add LINE OA ติวฉลาด</div>
+              <div style={{fontSize:10,opacity:.85}}>@{cfg?.adminLineId||'Oady'}</div>
+            </div>
+          </a>
+          <div style={{fontSize:Math.max(11,fs-3),color:C.greenD,opacity:.8}}>
+            📧 {cfg?.adminEmail||'thitiphankk@gmail.com'}<br/>
+            ⏰ ตอบกลับภายใน 24 ชั่วโมง
+          </div>
+        </div>
+
+        {/* App info */}
+        <div style={{background:'#f8fafc',borderRadius:12,padding:'12px',textAlign:'center'}}>
+          <div style={{fontSize:fs-1,fontWeight:700,color:C.text,marginBottom:3}}>ติวฉลาด {VERSION}</div>
+          <div style={{fontSize:Math.max(10,fs-4),color:C.muted}}>แอปติวสอบเข้า ม.1 โรงเรียนดัง กทม.<br/>tiwchalet.vercel.app</div>
+          <div style={{fontSize:10,color:C.muted,marginTop:6}}>CustomerID: {customerId}</div>
+        </div>
+      </div>)}
+
       {/* BOTTOM NAV */}
       {screen!=='exam'&&(
         <div style={{position:'fixed',bottom:0,left:0,right:0,background:'#fff',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-around',padding:'8px 0 max(10px,env(safe-area-inset-bottom))',zIndex:50}}>
           {(mode==='student'
-            ?[{id:'home',icon:'🏠',label:'หลัก'},{id:'pick',icon:'📝',label:'ข้อสอบ'},{id:'progress',icon:'📊',label:'ผล'},{id:'upgrade',icon:'⭐',label:'Full'}]
-            :[{id:'home',icon:'📊',label:'Dashboard'},{id:'pick',icon:'📝',label:'ข้อสอบ'},{id:'progress',icon:'📋',label:'ประวัติ'},{id:'settings',icon:'⚙️',label:'ตั้งค่า'}]
+            ?[{id:'home',icon:'🏠',label:'1 หลัก'},{id:'pick',icon:'📝',label:'2 สอบ'},{id:'progress',icon:'📊',label:'3 ผล'},{id:'upgrade',icon:'⭐',label:'4 Full'},{id:'help',icon:'❓',label:'5 ช่วย'}]
+            :[{id:'home',icon:'📊',label:'1 Dashboard'},{id:'pick',icon:'📝',label:'2 ข้อสอบ'},{id:'progress',icon:'📋',label:'3 ประวัติ'},{id:'settings',icon:'⚙️',label:'4 ตั้งค่า'},{id:'help',icon:'❓',label:'5 ช่วยเหลือ'}]
           ).map((item:any)=>(
             <button key={item.id} onClick={()=>setScreen(item.id as Screen)}
               style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'transparent',border:'none',cursor:'pointer',fontFamily:'inherit',minWidth:52,padding:'4px 6px'}}>
               <span style={{fontSize:22}}>{item.icon}</span>
-              <span style={{fontSize:10,color:screen===item.id?C.green:C.muted,fontWeight:screen===item.id?700:400}}>{item.label}</span>
+              <span style={{fontSize:9,color:screen===item.id?C.green:C.muted,fontWeight:screen===item.id?700:400,letterSpacing:-0.3}}>{item.label}</span>
             </button>
           ))}
         </div>
