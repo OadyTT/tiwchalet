@@ -75,7 +75,7 @@ function PinModal({pinFor,onSuccess,onCancel}:{pinFor:PinFor;onSuccess:(t:string
     if(next.length===5) await doVerify(next)
   }
   const isParent=pinFor==='parent'
-  const maxLen=isParent?4:6
+  const maxLen=isParent?5:6
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:700,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -98,7 +98,7 @@ function PinModal({pinFor,onSuccess,onCancel}:{pinFor:PinFor;onSuccess:(t:string
         ):(
           <>
             <div style={{display:'flex',justifyContent:'center',gap:14,marginBottom:20}}>
-              {[0,1,2,3].map(i=><div key={i} style={{width:13,height:13,borderRadius:'50%',background:i<pin.length?C.navy:'#e2e8f0',transition:'background .12s'}}/>)}
+              {[0,1,2,3,4].map(i=><div key={i} style={{width:13,height:13,borderRadius:'50%',background:i<pin.length?C.navy:'#e2e8f0',transition:'background .12s'}}/>)}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
               {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d,i)=>d===''?<div key={i}/>:
