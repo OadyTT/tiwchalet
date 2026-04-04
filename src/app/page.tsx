@@ -183,6 +183,32 @@ function PaymentModal({cfg,onClose}:{cfg:AppCfg|null;onClose:()=>void}) {
   )
 }
 
+// ─── QUICK BUTTON ─────────────────────────────────────────
+function QuickBtn({icon,label,sub,color,onClick,busy,disabled=false,active=false}:{
+  icon:string;label:string;sub:string;color:string
+  onClick:()=>void;busy:boolean;disabled?:boolean;active?:boolean
+}){
+  return (
+    <button onClick={onClick} disabled={disabled||busy}
+      style={{display:'flex',alignItems:'center',gap:8,padding:'10px 10px',borderRadius:12,
+        border:`1.5px solid ${active?'#86efac':'#e2e8f0'}`,
+        background:active?'#f0fdf4':'#fff',
+        cursor:disabled||busy?'default':'pointer',
+        fontFamily:'inherit',textAlign:'left',width:'100%',
+        opacity:disabled?.5:1,minHeight:52,overflow:'hidden'}}>
+      <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:600,color:disabled?'#94a3b8':color,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</div>
+        {sub&&<div style={{
+          fontSize:10,color:active?'#15803d':'#64748b',marginTop:1,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:active?600:400
+        }}>{sub}</div>}
+      </div>
+    </button>
+  )
+}
+
 // ─── COMPARE MODAL ──────────────────────────────────────────────
 function CompareModal({onClose,onPay}:{onClose:()=>void;onPay:()=>void}) {
   const rows=[
@@ -1006,21 +1032,26 @@ export default function Home() {
                 </div>
 
                 {/* Quick actions grid */}
+                <style>{`
+                  @keyframes marquee{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
+                  .marquee{overflow:hidden;white-space:nowrap}
+                  .marquee span{display:inline-block;animation:marquee 5s linear infinite}
+                `}</style>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-                  {[
-                    {icon:'📱',label:'1. Backup เครื่อง',fn:doBackupLocal,c:'#1d4ed8'},
-                    {icon:'🔄',label:(lastCloud&&lastSheet)?`2. Backup ✓ ${lastSheet.slice(0,5)}`:'2. Backup Sheets',fn:doBackupAll,c:'#0891b2'},
-                    {icon:'🔄',label:(lastCloud||lastSheet)?`3. Backed ${(lastCloud||lastSheet||'').slice(0,5)}`:'3. Backup Cloud',fn:doBackupAll,c:C.green},
-                    {icon:'♻️',label:'4. Restore',fn:()=>setShowRestoreModal(true),c:C.blue},
-                    {icon:'📄',label:'5. รายงาน A4',fn:()=>setShowReportModal(true),c:'#7c3aed',disabled:!history.length},
-                    {icon:'⚙️',label:'6. ตั้งค่า',fn:()=>setScreen('settings'),c:C.muted},
-                  ].map(b=>(
-                    <button key={b.label} onClick={b.fn} disabled={b.disabled||backupBusy}
-                      style={{display:'flex',alignItems:'center',gap:7,padding:'9px 10px',borderRadius:11,border:`1px solid ${C.border}`,background:'#fff',color:b.disabled?C.muted:b.c,cursor:b.disabled||backupBusy?'default':'pointer',fontFamily:'inherit',fontSize:Math.max(11,fs-2),fontWeight:500,opacity:b.disabled?.5:1}}>
-                      <span style={{fontSize:16}}>{b.icon}</span>
-                      <span>{b.label}</span>
-                    </button>
-                  ))}
+                  {/* 1 Backup เครื่อง */}
+                  <QuickBtn icon="📱" label="1. Backup เครื่อง" sub={lastLocal||''} color='#1d4ed8' onClick={doBackupLocal} busy={backupBusy}/>
+                  {/* 2 Backup Sheets (Supabase+Sheets) */}
+                  <QuickBtn icon="🔄" label="2. Backup Sheets"
+                    sub={(lastCloud&&lastSheet)?`✓ ${lastSheet}`:(lastCloud?`Supabase ✓`:'')}
+                    color='#0891b2' onClick={doBackupAll} busy={backupBusy} active={!!(lastCloud&&lastSheet)}/>
+                  {/* 3 Restore */}
+                  <QuickBtn icon="♻️" label="3. Restore" sub={lastRestore||''} color={C.blue} onClick={()=>setShowRestoreModal(true)} busy={false}/>
+                  {/* 4 รายงาน */}
+                  <QuickBtn icon="📄" label="4. รายงาน A4" sub='' color='#7c3aed' onClick={()=>setShowReportModal(true)} busy={false} disabled={!history.length}/>
+                  {/* 5 ตั้งค่า */}
+                  <QuickBtn icon="⚙️" label="5. ตั้งค่า" sub='' color={C.muted} onClick={()=>setScreen('settings')} busy={false}/>
+                  {/* 6 Full Version */}
+                  <QuickBtn icon="⭐" label="6. Full Version" sub='' color={C.gold} onClick={()=>setScreen('upgrade')} busy={false}/>
                 </div>
 
                 {/* LINE OA button */}
